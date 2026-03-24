@@ -1,0 +1,75 @@
+export const API_ENDPOINTS = {
+  AUTH: {
+    LOGIN: "/auth/login",
+    REGISTER: "/auth/register",
+    LOGOUT: "/auth/logout",
+    REFRESH_TOKEN: "/auth/refresh-token",
+    GET_ME: "/users/profile/me",
+  },
+  SHOPS: {
+    MY_SHOP: "/shops/my-shops",
+    DASHBOARD_METRICS: "/shops/dashboard/metrics",
+    UPDATE: "/shops/update",
+    CREATE_ACCOUNT: (shopId: string) => `/shops/${shopId}/accounts`,
+  },
+  PRODUCTS: {
+    LIST_BY_BRANCH: (branchId: string) => `/products/branch/${branchId}`,
+    CREATE: "/products",
+    DETAIL: (id: string) => `/products/${id}`,
+    UPDATE: (id: string) => `/products/${id}`,
+    DELETE: (id: string) => `/products/${id}`,
+  },
+  BRANCHES: {
+    LIST_BY_SHOP: (shopId: string) => `/branches/shop/${shopId}`,
+    NEARBY: "/branches/nearby",
+    CREATE: "/branches",
+    DETAIL: (id: string) => `/branches/${id}`,
+    UPDATE: (id: string) => `/branches/${id}`,
+    DELETE: (id: string) => `/branches/${id}`,
+  },
+  INVENTORY: {
+    BRANCH: (branchId: string) => `/inventory/branch/${branchId}`,
+    SHOP: (shopId: string) => `/inventory/shop/${shopId}`,
+    LOW_STOCK_BRANCH: (branchId: string) => `/inventory/low-stock/${branchId}`,
+    LOW_STOCK_SHOP: (shopId: string) => `/inventory/low-stock/shop/${shopId}`,
+    HISTORY_BRANCH: (branchId: string) => `/inventory/history/${branchId}`,
+    HISTORY_SHOP: (shopId: string) => `/inventory/history/shop/${shopId}`,
+    UPDATE: "/inventory/update",
+    THRESHOLD: "/inventory/threshold",
+  },
+  STOCK_REQUESTS: {
+    BRANCH: (branchId: string) => `/stock-requests/branch/${branchId}`,
+    SHOP: (shopId: string) => `/stock-requests/shop/${shopId}`,
+    CREATE: "/stock-requests/create",
+    STATUS_UPDATE: (id: string) => `/stock-requests/status/${id}`,
+  },
+  CATEGORIES: {
+    BRANCH: (branchId: string) => `/categories/branch/${branchId}`,
+    CREATE: "/categories",
+    DETAIL: (id: string) => `/categories/${id}`,
+    UPDATE: (id: string) => `/categories/${id}`,
+    DELETE: (id: string) => `/categories/${id}`,
+  },
+  CART: {
+    GET: (roomCode: string) => `/cart/${roomCode}`,
+    JOIN: "/cart/join",
+    ADD_ITEM: (roomCode: string) => `/cart/${roomCode}/items`,
+    UPDATE_ITEM: (roomCode: string, itemId: string) => `/cart/${roomCode}/items/${itemId}`,
+    REMOVE_ITEM: (roomCode: string, itemId: string) => `/cart/${roomCode}/items/${itemId}`,
+  },
+  VOUCHERS: {
+    PLATFORM: "/vouchers/platform",
+    SHOP: (shopId: string) => `/vouchers/shop/${shopId}`,
+    APPLY: (code: string) => `/vouchers/${code}`,
+  },
+  WALLET: {
+    GET_SHOP: (shopId: string) => `/wallets/shop/${shopId}`,
+    COMPLETE_SUBORDER: (subOrderId: string) => `/wallets/sub-order/${subOrderId}/complete`,
+  },
+  ORDERS: {
+    CHECKOUT: "/orders/checkout",
+    MY_ORDERS: "/orders/my-orders",
+    DETAIL: (id: string) => `/orders/${id}`,
+    UPDATE_STATUS: (id: string) => `/orders/sub-order/${id}/status`,
+  }
+} as const;

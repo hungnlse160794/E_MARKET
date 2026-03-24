@@ -1,0 +1,10 @@
+export const COMMON_CONSTANTS = {
+    STOCK_REQUEST_STATUS: {
+        PENDING: 'PENDING',
+        APPROVED: 'APPROVED',
+        SHIPPING: 'SHIPPING',
+        COMPLETED: 'COMPLETED',
+        REJECTED: 'REJECTED',
+        CANCELLED: 'CANCELLED'
+    }
+} as const;
