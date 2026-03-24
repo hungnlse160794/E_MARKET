@@ -30,6 +30,14 @@ export const initSocket = (server) => {
             }
         });
 
+        // Join room theo Cart (Cho khách mua chung)
+        socket.on('join_cart_room', (roomCode) => {
+            if (roomCode) {
+                socket.join(`cart_${roomCode}`);
+                console.log(`[Socket] Client đã tham gia Room Cart_${roomCode}.`);
+            }
+        });
+
         socket.on('disconnect', () => {
             console.log(`[Socket] Khách ngắt kết nối: ${socket.id}`);
         });

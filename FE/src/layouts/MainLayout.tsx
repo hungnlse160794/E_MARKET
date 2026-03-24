@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { PATHS } from '@/routes/paths'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Bell, Search, LogOut,
   Menu, User, ChevronDown,
   LayoutDashboard,
-  Wallet
+  Wallet,
+  ShoppingCart
 } from "lucide-react"
+import { useCart } from '@/features/cart/hooks/useCart'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { UserRole } from '@/types'
 import { useAuth } from '@/features/auth/hooks/useAuth'
@@ -18,10 +21,13 @@ import {
 } from "@/components/ui/popover"
 
 export const MainLayout = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const location = useLocation();
   const { user } = useAuthStore();
   const { logout } = useAuth();
+  const { cart } = useCart();
+
+  const totalItems = cart?.items.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   const isDashboardView = location.pathname.startsWith('/dashboard') || 
                           location.pathname.startsWith('/profile') || 
@@ -79,9 +85,18 @@ export const MainLayout = () => {
               </nav>
             )}
 
-            <button className="relative text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full ring-2 ring-white" />
+            <Link to={PATHS.CART} className="relative text-slate-700 hover:text-indigo-600 p-2 hover:bg-slate-50 rounded-xl transition-all group">
+              <ShoppingCart size={21} className="group-hover:scale-110 transition-transform" />
+              {totalItems > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[19px] h-[19px] px-1 bg-indigo-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-[1.5px] border-white animate-in zoom-in-50">
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
+            </Link>
+
+            <button className="relative text-slate-500 hover:text-indigo-600 p-2 hover:bg-slate-50 rounded-xl transition-all group">
+              <Bell size={21} className="group-hover:rotate-12 transition-transform" />
+              <span className="absolute top-2 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
             </button>
 
             <div className="h-6 w-px bg-slate-200 mx-1" />
@@ -155,8 +170,8 @@ export const MainLayout = () => {
             )}
             {!user && (
               <div className="flex items-center gap-4">
-                <Link to="/auth/login" className="text-[13px] font-bold text-slate-500">Đăng nhập</Link>
-                <Link to="/auth/register" className="h-9 px-6 bg-linear-to-r from-indigo-500 to-violet-500 text-white text-[12px] font-bold rounded-full flex items-center">Đăng ký</Link>
+                <Link to={PATHS.AUTH.LOGIN} className="text-[13px] font-bold text-slate-500">Đăng nhập</Link>
+                <Link to={PATHS.AUTH.REGISTER} className="h-9 px-6 bg-linear-to-r from-indigo-500 to-violet-500 text-white text-[12px] font-bold rounded-full flex items-center">Đăng ký</Link>
               </div>
             )}
           </div>

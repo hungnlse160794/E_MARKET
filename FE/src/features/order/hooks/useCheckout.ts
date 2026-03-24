@@ -11,8 +11,12 @@ export interface ICheckoutPayload {
   cartId: string;
   paymentMethod: 'COD' | 'WALLET' | 'VNPAY';
   shippingAddress: {
-    title: string;
-    fullAddress: string;
+    fullName: string;
+    phone: string;
+    provinceId: string;
+    districtId: string;
+    wardCode: string;
+    addressLine: string;
   };
   vouchers?: string[];
   note?: string;
@@ -22,15 +26,20 @@ export const useCheckout = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  return useMutation<ApiResponse<IOrder>, AxiosError<ApiResponse<unknown>>, ICheckoutPayload>({
+  return useMutation<ApiResponse<IOrder & { paymentUrl?: string }>, AxiosError<ApiResponse<unknown>>, ICheckoutPayload>({
     mutationFn: async (payload) => {
       return await axiosClient.post(API_ENDPOINTS.ORDERS.CHECKOUT, payload);
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["cart"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+      if (response.data.paymentUrl) {
+         window.location.href = response.data.paymentUrl;
+         return;
+      }
+
       toast.success("Đặt hàng thành công!");
-      // localStorage.removeItem("cart_room_code"); // Optional: Keep it if they want to rejoin?
       navigate(`/profile/orders/${response.data._id}`);
     },
     onError: (error) => {

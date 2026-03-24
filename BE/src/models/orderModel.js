@@ -31,7 +31,9 @@ const subOrderSchema = new mongoose.Schema({
         productId: mongoose.Schema.Types.ObjectId,
         name: String,
         unitName: String,
+        unitNameSnapshot: String, // Snapshot cho BA Audit
         price: Number,
+        priceAtPurchase: Number,   // Snapshot giá tại thời điểm đặt hàng
         quantity: Number
     }],
     subTotal: { type: Number, required: true },

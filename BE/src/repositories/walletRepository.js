@@ -53,7 +53,7 @@ export const WALLET_REPOSITORY = {
      */
     releaseFrozenBalance: async (shopId, amount, session = null) => {
         return await Wallet.findOneAndUpdate(
-            { shopId },
+            { shopId, frozenBalance: { $gte: amount } },
             { 
                 $inc: { 
                     balance: amount, 

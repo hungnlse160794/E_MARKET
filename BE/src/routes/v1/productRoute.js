@@ -23,6 +23,47 @@ const router = express.Router();
 /**
  * @swagger
  * /products:
+ *   get:
+ *     summary: Lấy toàn bộ sản phẩm của hệ thống (Cho khách hàng - Phân trang)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Tìm kiếm theo tên sản phẩm
+ *       - in: query
+ *         name: category
+ *         schema: { type: string }
+ *         description: Lọc theo Category ID
+ *       - in: query
+ *         name: minPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: maxPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [price-asc, price-desc, rating-desc, newest] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Danh sách sản phẩm thành công
+ */
+router.get(
+    '/',
+    paginationMiddleware,
+    validationHandlingMiddleware(productValidation.getProducts),
+    productController.getProducts
+);
+
+/**
+ * @swagger
+ * /products:
  *   post:
  *     summary: Tạo sản phẩm mới
  *     tags: [Products]
@@ -45,7 +86,7 @@ const router = express.Router();
  *                 items:
  *                   type: object
  *                   properties:
-                     unitName: { type: string, example: "Ly Lớn" }
+ *                     unitName: { type: string, example: "Ly Lớn" }
  *                     price: { type: number, example: 50000 }
  *                     isDefault: { type: boolean, example: true }
  *     responses:
@@ -83,7 +124,7 @@ router.post(
  */
 router.get(
     '/:id',
-    validationHandlingMiddleware(productValidation.getProductById),
+    validationHandlingMiddleware(productValidation.getProductByIdOrSlug),
     productController.getProductById
 );
 

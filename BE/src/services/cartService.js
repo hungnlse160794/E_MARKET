@@ -26,7 +26,18 @@ export const cartService = {
 
         let cart = await CART_REPOSITORY.findByUserId(requestUser.userId);
 
-        // 2. Checklist: Limit kích thước giỏ hàng (chống DoS)
+        // 2. Bảo mật: Kiểm tra tồn kho tại Chi nhánh (Branch) đã chọn
+        if (itemData.branchId) {
+            const inventory = await INVENTORY_REPOSITORY.findOne({ 
+                productId, 
+                branchId: itemData.branchId 
+            });
+            if (!inventory || inventory.quantity < quantity) {
+                throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Sản phẩm hiện không đủ tồn kho tại chi nhánh này']);
+            }
+        }
+
+        // 3. Checklist: Limit kích thước giỏ hàng (chống DoS)
         if (cart && cart.items.length >= 100) {
             throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Giỏ hàng của bạn đã đầy (tối đa 100 món)']);
         }
@@ -36,7 +47,7 @@ export const cartService = {
             shopId: product.shopId,
             branchId: itemData.branchId, // Chi nhánh do khách chọn
             unitName,
-            quantity,
+            quantity: Math.min(quantity, 50), // Giới hạn tối đa 50 đơn vị cho 1 lần thêm (Anti-spam)
             price: currentPrice, // Dùng giá từ DB
             addedBy: requestUser.userId
         };
@@ -44,7 +55,7 @@ export const cartService = {
         if (!cart) {
             cart = await CART_REPOSITORY.create({
                 ownerId: requestUser.userId,
-                roomCode: GENERATE_UTILS.generateRoomCode(6),
+                roomCode: null, // Mặc định là giỏ hàng Cá nhân
                 items: [newItem],
                 members: []
             });
@@ -103,10 +114,42 @@ export const cartService = {
         const cart = await CART_REPOSITORY.findByRoomCode(roomCode);
         if (!cart) throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Mã phòng không hợp lệ hoặc giỏ hàng đã đóng']);
 
-        if (cart.ownerId.toString() === requestUser.userId.toString()) {
+        // Check if user is already in this cart
+        if (cart.ownerId.toString() === requestUser.userId.toString() || 
+            cart.members.some(m => m.toString() === requestUser.userId.toString())) {
             return cart;
         }
 
+        // Logic Giai đoạn 0: Một người chỉ được ở trong 1 phòng tại 1 thời điểm
+        const existingCart = await CART_REPOSITORY.findByUserId(requestUser.userId);
+        if (existingCart && existingCart.roomCode && existingCart.roomCode !== roomCode) {
+            throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Bạn đã tham gia một phòng khác. Vui lòng rời phòng cũ trước.']);
+        }
+
         return await CART_REPOSITORY.addMember(cart._id, requestUser.userId);
+    },
+
+    shareCart: async (requestUser) => {
+        const cart = await CART_REPOSITORY.findByOwnerId(requestUser.userId);
+        if (!cart) throw new ApiError(ERROR_CODES.RESOURCE_NOT_FOUND, ['Chưa có giỏ hàng để chia sẻ']);
+        
+        if (cart.roomCode) return cart; // Đã là shared cart rồi
+
+        const roomCode = GENERATE_UTILS.generateRoomCode(8); // Mã 8 ký tự cho trang trọng
+        return await CART_REPOSITORY.update(cart._id, { roomCode });
+    },
+
+    leaveCart: async (cartId, requestUser) => {
+        const cart = await CART_REPOSITORY.findById(cartId);
+        if (!cart) throw new ApiError(ERROR_CODES.RESOURCE_NOT_FOUND);
+
+        if (cart.ownerId.toString() === requestUser.userId.toString()) {
+            // Nếu chủ phòng rời đi: Reset roomCode (Hạ cấp về giỏ cá nhân) và xóa members
+            return await CART_REPOSITORY.update(cart._id, { roomCode: null, members: [] });
+        } else {
+            // Nếu thành viên rời đi
+            const updatedMembers = cart.members.filter(m => m._id.toString() !== requestUser.userId.toString());
+            return await CART_REPOSITORY.update(cart._id, { members: updatedMembers });
+        }
     }
 };

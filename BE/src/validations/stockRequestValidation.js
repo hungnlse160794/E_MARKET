@@ -22,9 +22,9 @@ export const stockRequestValidation = {
         }),
         body: Joi.object({
             status: Joi.string().valid(...Object.values(COMMON_CONSTANTS.STOCK_REQUEST_STATUS)).required(),
-            rejectionReason: Joi.string().when('status', {
+            rejectionReason: Joi.string().allow('').when('status', {
                 is: COMMON_CONSTANTS.STOCK_REQUEST_STATUS.REJECTED,
-                then: Joi.required(),
+                then: Joi.string().required().min(1),
                 otherwise: Joi.optional()
             })
         })

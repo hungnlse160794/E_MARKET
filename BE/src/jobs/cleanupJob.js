@@ -43,4 +43,16 @@ export const initCleanupJobs = () => {
         });
         console.log(`[Job] Đã xóa ${result.deletedCount} sessions hết hạn.`);
     });
+
+    // 4. Tự động hủy đơn hàng quá hạn thanh toán (20 phút)
+    // Chạy mỗi 15 phút
+    cron.schedule('*/15 * * * *', async () => {
+        console.log('[Job] Đang kiểm tra đơn hàng quá hạn thanh toán...');
+        try {
+            const { orderService } = await import('#services/orderService.js');
+            await orderService.cancelExpiredOrders(20);
+        } catch (error) {
+            console.error('[Job] Lỗi trong tiến trình dọn dẹp đơn hàng:', error);
+        }
+    });
 };

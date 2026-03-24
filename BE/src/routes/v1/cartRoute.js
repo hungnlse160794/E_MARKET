@@ -175,4 +175,34 @@ router.post(
     cartController.joinSharedCart
 );
 
+/**
+ * @swagger
+ * /cart/share:
+ *   post:
+ *     summary: Chuyển giỏ hàng cá nhân thành giỏ hàng chia sẻ (Sinh roomCode)
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+    '/share',
+    apiRateLimiter,
+    cartController.shareCart
+);
+
+/**
+ * @swagger
+ * /cart/leave/{cartId}:
+ *   post:
+ *     summary: Rời khỏi giỏ hàng chia sẻ
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+    '/leave/:cartId',
+    apiRateLimiter,
+    cartController.leaveCart
+);
+
 export default router;

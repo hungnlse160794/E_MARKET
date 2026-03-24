@@ -12,7 +12,7 @@ const cartItemSchema = new mongoose.Schema({
 
 const sharedCartSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    roomCode: { type: String, unique: true }, // Mã để mời người khác vào giỏ
+    roomCode: { type: String, unique: true, sparse: true }, // Mã để mời người khác vào giỏ (sparse để hỗ trợ giỏ cá nhân roomCode=null)
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     items: [cartItemSchema],
     status: { type: String, enum: ['ACTIVE', 'COMPLETED', 'ABANDONED'], default: 'ACTIVE' }

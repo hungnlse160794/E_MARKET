@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useOrders } from "./hooks/useOrders";
 import { formatCurrency, formatDate } from "@/utils/format";
 import { 
@@ -7,8 +8,7 @@ import {
   Clock, 
   CheckCircle2, 
   Truck, 
-  ShoppingBag,
-  Plus
+  ShoppingBag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +19,13 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { PATHS } from "@/routes/paths";
 import type { IOrder, IProduct } from "@/types";
+import { ReviewModal } from "../product/components/ReviewModal";
 
 export default function OrderHistoryPage() {
   const { data: response, isLoading } = useOrders();
   const orders = response?.orders || [];
+
+  const [reviewingItem, setReviewingItem] = useState<{ productId: string, productName: string, subOrderId: string } | null>(null);
 
   if (isLoading) {
     return <PageContainer><Skeleton className="h-[600px] w-full rounded-4xl" /></PageContainer>;
@@ -109,25 +112,39 @@ export default function OrderHistoryPage() {
                   </div>
 
                   {/* Order Preview Items */}
-                  <div className="mt-8 pt-8 border-t border-slate-50 flex items-center gap-4 overflow-hidden">
-                     {order.items.slice(0, 3).map((item, i) => (
-                       <div key={i} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100 pr-6 shrink-0">
-                          <div className="h-10 w-10 rounded-lg bg-white border border-slate-100 flex items-center justify-center overflow-hidden">
-                             <Package size={20} className="text-slate-300" />
+                  <div className="mt-8 pt-8 border-t border-slate-50 flex flex-wrap items-center gap-4">
+                     {order.items.map((item, i) => (
+                       <div key={i} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 pr-4 shrink-0 hover:bg-white hover:border-indigo-100 transition-all group/item">
+                          <div className="h-12 w-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden">
+                             {typeof item.productId === 'object' && 'images' in item.productId ? (
+                               <img src={(item.productId as IProduct).images[0]} className="h-full w-full object-cover" />
+                             ) : (
+                               <Package size={20} className="text-slate-300" />
+                             )}
                           </div>
-                          <div className="space-y-0.5">
-                             <p className="text-[10px] font-black text-slate-700 uppercase leading-none truncate max-w-[120px]">
+                          <div className="space-y-0.5 max-w-[150px]">
+                             <p className="text-[11px] font-black text-slate-700 uppercase leading-none truncate">
                                 {typeof item.productId === 'object' && 'name' in item.productId ? (item.productId as IProduct).name : 'Product'}
                              </p>
-                             <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Số lượng: {item.quantity}</p>
+                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Số lượng: {item.quantity}</p>
                           </div>
+                          
+                          {(order.status === 'COMPLETED' || order.status === 'DELIVERED') && (
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => setReviewingItem({
+                                productId: typeof item.productId === 'string' ? item.productId : (item.productId as IProduct)._id,
+                                productName: typeof item.productId === 'object' && 'name' in item.productId ? (item.productId as IProduct).name : 'Sản phẩm',
+                                subOrderId: order._id
+                              })}
+                              className="h-8 px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[9px] font-black uppercase tracking-widest transition-all"
+                            >
+                               ĐÁNH GIÁ
+                            </Button>
+                          )}
                        </div>
                      ))}
-                     {order.items.length > 3 && (
-                       <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                          <Plus size={14} /> {order.items.length - 3} sản phẩm khác
-                       </div>
-                     )}
                   </div>
                </motion.div>
              ))
@@ -149,6 +166,16 @@ export default function OrderHistoryPage() {
            )}
         </div>
       </div>
+
+      {reviewingItem && (
+        <ReviewModal 
+          isOpen={!!reviewingItem}
+          onClose={() => setReviewingItem(null)}
+          productId={reviewingItem.productId}
+          productName={reviewingItem.productName}
+          subOrderId={reviewingItem.subOrderId}
+        />
+      )}
     </PageContainer>
   );
 }

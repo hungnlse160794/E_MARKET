@@ -10,6 +10,10 @@ export const VOUCHER_REPOSITORY = {
         return await Voucher.findOne({ code, isDeleted: false }).lean();
     },
 
+    findByCodeWithCreator: async (code) => {
+        return await Voucher.findOne({ code, isDeleted: false }).populate('createdBy', 'role').lean();
+    },
+
     findById: async (id) => {
         return await Voucher.findOne({ _id: id, isDeleted: false }).lean();
     },
@@ -34,10 +38,22 @@ export const VOUCHER_REPOSITORY = {
         return await Voucher.find({ shopId, isDeleted: false }).sort({ createdAt: -1 }).lean();
     },
 
-    incrementUsedCount: async (id, session = null) => {
-        return await Voucher.findByIdAndUpdate(
-            id, 
+    findBranchVouchers: async (branchId) => {
+        return await Voucher.find({ branchId, isDeleted: false }).sort({ createdAt: -1 }).lean();
+    },
+
+    incrementUsedCount: async (id, usageLimit, session = null) => {
+        return await Voucher.findOneAndUpdate(
+            { _id: id, usedCount: { $lt: usageLimit }, isDeleted: false }, 
             { $inc: { usedCount: 1 } }, 
+            { session, new: true }
+        );
+    },
+
+    decrementUsedCount: async (id, session = null) => {
+        return await Voucher.findOneAndUpdate(
+            { _id: id, usedCount: { $gt: 0 }, isDeleted: false }, 
+            { $inc: { usedCount: -1 } }, 
             { session, new: true }
         );
     }

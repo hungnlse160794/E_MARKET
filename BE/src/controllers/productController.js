@@ -22,11 +22,22 @@ export const productController = {
 
     getProductsByBranchId: catchAsync(async (req, res) => {
         const { branchId } = req.params;
-        // REFACTORED: Sử dụng req.pagination thay vì req.query trực tiếp, filter lấy từ req.query
-        const result = await productService.getBranchProducts(branchId, req.pagination, req.query);
+        const filters = req.validated?.query || req.query;
+        const result = await productService.getBranchProducts(branchId, req.pagination, filters);
         res.status(200).json({
             success: true,
             message: 'Lấy danh sách sản phẩm thành công',
+            data: result
+        });
+    }),
+
+    getProducts: catchAsync(async (req, res) => {
+        // Use validated query if available for correct types
+        const filters = req.validated?.query || req.query;
+        const result = await productService.getAllProducts(req.pagination, filters);
+        res.status(200).json({
+            success: true,
+            message: 'Lấy toàn bộ danh sách sản phẩm thành công',
             data: result
         });
     }),

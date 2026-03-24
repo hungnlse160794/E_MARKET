@@ -58,10 +58,19 @@ export const useSocket = (): UseSocketReturn => {
       queryClient.invalidateQueries({ queryKey: ["orders", "detail", data.subOrderId] });
     });
 
-    socket.on("cart_updated", (data: { roomCode: string }) => {
-      toast.success("Giỏ hàng chung đã nhận cập nhật mới!");
-      queryClient.invalidateQueries({ queryKey: ["cart", data.roomCode] });
+    socket.on("cart_updated", (data: { roomCode?: string; isPersonal?: boolean }) => {
+      // Invalidate toàn bộ cache cart để re-fetch
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
+      if (!data.isPersonal) {
+          toast.success("Giỏ hàng chung đã được cập nhật!");
+      }
     });
+
+    // Theo dõi roomCode để tham gia phòng
+    const roomCode = localStorage.getItem("cart_room_code");
+    if (roomCode) {
+        socket.emit("join_cart_room", roomCode);
+    }
 
     return () => {
       socket.disconnect();

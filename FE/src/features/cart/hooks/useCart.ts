@@ -6,23 +6,22 @@ import type { ICart, ICartItem } from "@/types";
 import type { ApiResponse } from "@/types/common";
 import { toast } from "sonner";
 
-export const useCart = (roomCode?: string) => {
+export const useCart = () => {
   const queryClient = useQueryClient();
 
-  // Fetch Cart Details
+  // Fetch Cart Details (Personal or Shared)
   const cartQuery = useQuery<ICart, AxiosError>({
-    queryKey: ["cart", roomCode],
+    queryKey: ["cart"],
     queryFn: async () => {
-      if (!roomCode) throw new Error("Room code is required");
-      const response = await axiosClient.get<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.GET(roomCode));
+      const response = await axiosClient.get<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.GET);
       return response.data;
     },
-    enabled: !!roomCode,
-    refetchInterval: 5000, // Real-time sync every 5s for Phase 2
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
   });
 
-  // Join/Create Room
-  const joinRoomMutation = useMutation<ICart, AxiosError, { roomCode?: string }>({
+  // Join Room
+  const joinRoomMutation = useMutation<ICart, AxiosError, { roomCode: string }>({
     mutationFn: async (data) => {
       const response = await axiosClient.post<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.JOIN, data);
       return response.data;
@@ -30,42 +29,66 @@ export const useCart = (roomCode?: string) => {
     onSuccess: (data) => {
       localStorage.setItem("cart_room_code", data.roomCode);
       queryClient.invalidateQueries({ queryKey: ["cart"] });
+      toast.success("Đã tham gia giỏ hàng chia sẻ!");
+    }
+  });
+
+  // Share/Create Room
+  const shareCartMutation = useMutation<ICart, AxiosError, void>({
+    mutationFn: async () => {
+       const response = await axiosClient.post<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.SHARE);
+       return response.data;
+    },
+    onSuccess: (data) => {
+       localStorage.setItem("cart_room_code", data.roomCode);
+       queryClient.invalidateQueries({ queryKey: ["cart"] });
+       toast.success("Đã kích hoạt chế độ chia sẻ giỏ hàng!");
+    }
+  });
+
+  // Leave Room
+  const leaveRoomMutation = useMutation<ICart, AxiosError, string>({
+    mutationFn: async (cartId) => {
+       const response = await axiosClient.post<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.LEAVE(cartId));
+       return response.data;
+    },
+    onSuccess: () => {
+       localStorage.removeItem("cart_room_code");
+       queryClient.invalidateQueries({ queryKey: ["cart"] });
+       toast.info("Đã rời khỏi phòng.");
     }
   });
 
   // Add Item
   const addItemMutation = useMutation<ICart, AxiosError, Partial<ICartItem>>({
     mutationFn: async (item) => {
-      if (!roomCode) throw new Error("No room joined");
-      const response = await axiosClient.post<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.ADD_ITEM(roomCode), item);
+      const response = await axiosClient.post<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.ADD_ITEM, item);
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cart", roomCode] });
-      toast.success("Đã thêm vào giỏ hàng chung!");
+    onSuccess: (data) => {
+      queryClient.setQueryData(["cart"], data);
+      // Removed generic toast to let the page handle product-specific success
     }
   });
 
   // Update Item
-  const updateItemMutation = useMutation<ICart, AxiosError, { itemId: string, quantity: number }>({
-    mutationFn: async ({ itemId, quantity }) => {
-      if (!roomCode) throw new Error("No room joined");
-      const response = await axiosClient.patch<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.UPDATE_ITEM(roomCode, itemId), { quantity });
+  const updateItemMutation = useMutation<ICart, AxiosError, { cartId: string, itemId: string, quantity: number }>({
+    mutationFn: async ({ cartId, itemId, quantity }) => {
+      const response = await axiosClient.patch<ApiResponse<ICart>, ApiResponse<ICart>>(API_ENDPOINTS.CART.UPDATE_ITEM(cartId, itemId), { quantity });
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cart", roomCode] });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
     }
   });
 
   // Remove Item
-  const removeItemMutation = useMutation<void, AxiosError, string>({
-    mutationFn: async (itemId) => {
-      if (!roomCode) throw new Error("No room joined");
-      await axiosClient.delete(API_ENDPOINTS.CART.REMOVE_ITEM(roomCode, itemId));
+  const removeItemMutation = useMutation<void, AxiosError, { cartId: string, itemId: string }>({
+    mutationFn: async ({ cartId, itemId }) => {
+      await axiosClient.delete(API_ENDPOINTS.CART.REMOVE_ITEM(cartId, itemId));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cart", roomCode] });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
       toast.info("Đã xóa sản phẩm khỏi giỏ.");
     }
   });
@@ -75,7 +98,9 @@ export const useCart = (roomCode?: string) => {
     isLoading: cartQuery.isLoading,
     error: cartQuery.error,
     joinRoom: joinRoomMutation.mutateAsync,
-    addItem: addItemMutation.mutate,
+    shareCart: shareCartMutation.mutateAsync,
+    leaveRoom: leaveRoomMutation.mutateAsync,
+    addItem: addItemMutation.mutateAsync,
     isAdding: addItemMutation.isPending,
     updateItem: updateItemMutation.mutate,
     removeItem: removeItemMutation.mutate,

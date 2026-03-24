@@ -37,9 +37,8 @@ const productSchema = new mongoose.Schema({
 
 // Index để tìm kiếm sản phẩm và lọc nhanh hơn
 productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ slug: 1 }, { unique: true }); // Slug duy nhất toàn sàn hệ thống
 productSchema.index({ branchId: 1, categoryId: 1, status: 1 });
-productSchema.index({ shopId: 1, branchId: 1 });
-productSchema.index({ branchId: 1, slug: 1 }, { unique: true }); // Slug duy nhất trong cùng 1 chi nhánh
 
 productSchema.plugin(mongoosePaginate);
 

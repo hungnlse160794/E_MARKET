@@ -41,7 +41,8 @@ export const COMMON_CONSTANTS = {
         SHOP_OWNER: 'SHOP_OWNER',
         BRANCH_MANAGER: 'BRANCH_MANAGER',
         STAFF: 'STAFF',
-        PLATFORM_ADMIN: 'PLATFORM_ADMIN'
+        PLATFORM_ADMIN: 'PLATFORM_ADMIN',
+        SUPER_ADMIN: 'SUPER_ADMIN'
     },
 
     // Scope Types (dùng cho validateScope middleware)

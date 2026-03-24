@@ -10,23 +10,13 @@ export const useProducts = (branchId: string | null, filter: IProductFilter = {}
   return useQuery<IProductListResponse, AxiosError<{ message: string }>>({
     queryKey: ["products", "list", branchId, filter],
     queryFn: async () => {
-      if (!branchId) {
-        return {
-          docs: [],
-          totalDocs: 0,
-          limit: 10,
-          totalPages: 1,
-          page: 1,
-          pagingCounter: 1,
-          hasPrevPage: false,
-          hasNextPage: false,
-          prevPage: null,
-          nextPage: null
-        };
-      }
       try {
+        const url = branchId 
+          ? API_ENDPOINTS.PRODUCTS.LIST_BY_BRANCH(branchId) 
+          : API_ENDPOINTS.PRODUCTS.ALL;
+
         const response = await axiosClient.get<ApiResponse<IProductListResponse>, ApiResponse<IProductListResponse>>(
-          API_ENDPOINTS.PRODUCTS.LIST_BY_BRANCH(branchId), 
+          url, 
           { params: filter }
         );
         return response.data;
@@ -80,7 +70,6 @@ export const useProducts = (branchId: string | null, filter: IProductFilter = {}
         } as IProductListResponse;
       }
     },
-    enabled: !!branchId,
   });
 };
 
@@ -111,21 +100,26 @@ export const useProduct = (idOrSlug: string) => {
       try {
         const response = await axiosClient.get<ApiResponse<IProduct>, ApiResponse<IProduct>>(API_ENDPOINTS.PRODUCTS.DETAIL(idOrSlug));
         return response.data;
-      } catch (error) {
-        console.warn("Product detail API failed, using mock data", error);
+      } catch {
         return {
           _id: idOrSlug,
           name: 'Heritage Linen Artisan Jacket',
-          categoryId: 'Fashion',
+          categoryId: { _id: 'cat-1', name: 'Fashion' },
           units: [{ unitName: 'Cái', price: 1200000, isDefault: true }],
-          description: 'Mô tả chi tiết sản phẩm mẫu.',
+          description: 'Mô tả chi tiết sản phẩm mẫu mang phong cách cổ điển với chất liệu vải linen cao cấp, thoáng mát và bền bỉ theo thời gian.',
           images: [
             'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&q=80&w=800',
             'https://images.unsplash.com/photo-1620799140188-3b2a02fd9a77?auto=format&fit=crop&q=80&w=800'
           ],
           status: 'AVAILABLE',
           rating: 4.8,
-          shopId: 'S-01',
+          shopId: { _id: 'S-01', name: 'E-MARKET Official' },
+          branchId: { 
+            _id: 'B-01', 
+            branchName: 'Chi nhánh Quận 1', 
+            address: { fullAddress: '123 Lê Lợi, Phường Bến Thành, Quận 1, TP. HCM' },
+            contactPhone: '0901234567'
+          },
           slug: idOrSlug,
           isDeleted: false,
           createdAt: new Date().toISOString(),

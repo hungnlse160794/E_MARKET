@@ -20,11 +20,12 @@ export const validationHandlingMiddleware = (schema) => {
                 if (error) {
                     validationErrors.push(...error.details.map(detail => detail.message))
                 } else {
-                    // Ghi đè data "sạch" đã qua xử lý Joi (ép kiểu, trim...)
+                    // Overwrite data "sạch" cho body/params, giữ query riêng vì một số env không cho ghi đè
                     if (target === 'query') {
                         req.validated.query = value
                     } else {
                         req[target] = value
+                        req.validated[target] = value
                     }
                 }
             })

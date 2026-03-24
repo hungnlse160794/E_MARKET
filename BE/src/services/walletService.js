@@ -88,7 +88,25 @@ export const walletService = {
         }
 
         try {
+            // 1. Chuyển tiền Net cho Shop (frozenBalance -> balance)
             await WALLET_REPOSITORY.releaseFrozenBalance(subOrder.shopId._id, subOrder.netAmount, session);
+
+            // 2. Chuyển Platform Fee cho Ví Admin (Sàn)
+            if (subOrder.platformFee > 0) {
+                const adminWallet = await Wallet.findOne({ isSystemWallet: true }, null, { session });
+                if (adminWallet) {
+                    await WALLET_REPOSITORY.addBalance({ _id: adminWallet._id }, subOrder.platformFee, session);
+                    
+                    await TRANSACTION_REPOSITORY.create({
+                        walletId: adminWallet._id,
+                        orderId: subOrder._id,
+                        amount: subOrder.platformFee,
+                        type: 'FEE_INCOME',
+                        status: 'COMPLETED',
+                        description: `Phí sàn từ đơn hàng #${subOrder._id}`
+                    }, session);
+                }
+            }
 
             await TRANSACTION_REPOSITORY.create({
                 walletId: subOrder.shopId._id,
@@ -196,19 +214,25 @@ export const walletService = {
         }
 
         try {
-            // Trừ tiền khỏi Balance khả dụng
-            const wallet = await WALLET_REPOSITORY.deductBalance({ shopId }, amount, session);
+            // 1. Tính toán phí rút tiền (2%)
+            const withdrawalFee = amount * 0.02;
+            const totalDeduction = amount + withdrawalFee;
+
+            // 2. Trừ tiền khỏi Balance khả dụng (Cả tiền rút + phí)
+            const wallet = await WALLET_REPOSITORY.deductBalance({ shopId }, totalDeduction, session);
             if (!wallet) {
-                throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Số dư không đủ để thực hiện rút tiền']);
+                throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Số dư không đủ. Cần ${totalDeduction.toLocaleString()}đ (bao gồm 2% phí rút tiền)`]);
             }
 
-            // Tạo Giao dịch rút tiền (PENDING)
+            // 3. Tạo Giao dịch rút tiền (PENDING) - Lưu số tiền thực nhận sau phí? 
+            // Thường lưu số tiền yêu cầu và phí riêng. Ở đây ta lưu gộp hoặc log description.
             const txn = await TRANSACTION_REPOSITORY.create({
                 walletId: wallet._id,
-                amount: amount, // Positive amount to indicate absolute value requested
+                amount: amount, 
+                fee: withdrawalFee,
                 type: COMMON_CONSTANTS.TRANSACTION_TYPE.WITHDRAWAL,
                 status: COMMON_CONSTANTS.TRANSACTION_STATUS.PENDING,
-                description: `Yêu cầu rút số tiền: ${amount} VNĐ`
+                description: `Yêu cầu rút: ${amount.toLocaleString()}đ. Phí (2%): ${withdrawalFee.toLocaleString()}đ`
             }, session);
 
             if (session && session.inTransaction()) {
@@ -251,6 +275,12 @@ export const walletService = {
         try {
             const txn = await TRANSACTION_REPOSITORY.findById(txnId);
             if (!txn) throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Giao dịch không tồn tại']);
+            
+            const wallet = await Wallet.findById(txn.walletId).lean();
+            if (wallet.isSystemWallet && requestUser.role !== COMMON_CONSTANTS.USER_ROLE.SUPER_ADMIN) {
+                throw new ApiError(ERROR_CODES.FORBIDDEN, ['Chỉ Super Admin mới được duyệt lệnh rút từ Ví Sàn']);
+            }
+
             if (txn.status !== COMMON_CONSTANTS.TRANSACTION_STATUS.PENDING) {
                 throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Giao dịch này đã được xử lý']);
             }
@@ -259,8 +289,9 @@ export const walletService = {
                 await TRANSACTION_REPOSITORY.updateStatus(txnId, COMMON_CONSTANTS.TRANSACTION_STATUS.COMPLETED, session);
             } else if (action === 'REJECT') {
                 await TRANSACTION_REPOSITORY.updateStatus(txnId, COMMON_CONSTANTS.TRANSACTION_STATUS.FAILED, session);
-                // Hoàn lại tiền vào Wallet
-                await WALLET_REPOSITORY.addBalance({ _id: txn.walletId }, txn.amount, session);
+                // Hoàn lại tiền (gồm cả phí) vào Wallet
+                const restoreAmount = txn.amount + (txn.fee || 0);
+                await WALLET_REPOSITORY.addBalance({ _id: txn.walletId }, restoreAmount, session);
             } else {
                 throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Hành động không hợp lệ']);
             }
@@ -279,5 +310,35 @@ export const walletService = {
                 session.endSession();
             }
         }
+    },
+
+    /**
+     * Cập nhật thông tin ngân hàng cho Ví (SaaS Compliance)
+     */
+    updateBankInfo: async (walletId, bankInfo, requestUser) => {
+        const wallet = await Wallet.findById(walletId);
+        if (!wallet) throw new ApiError(ERROR_CODES.WALLET_NOT_FOUND);
+
+        // Security Check
+        if (wallet.isSystemWallet) {
+            if (requestUser.role !== COMMON_CONSTANTS.USER_ROLE.SUPER_ADMIN) {
+                throw new ApiError(ERROR_CODES.FORBIDDEN, ['Chỉ Super Admin mới được sửa thông tin ngân hàng của Sàn']);
+            }
+        } else if (wallet.shopId) {
+            PERMISSION_UTIL.verifyShopOwnership(wallet.shopId, requestUser);
+        } else {
+            if (wallet.userId.toString() !== requestUser.userId.toString()) {
+                throw new ApiError(ERROR_CODES.FORBIDDEN);
+            }
+        }
+
+        return await Wallet.findByIdAndUpdate(walletId, { bankInfo }, { new: true }).lean();
+    },
+
+    /**
+     * Lấy thông tin Ví Hệ thống (System Wallet)
+     */
+    getSystemWallet: async () => {
+        return await Wallet.findOne({ isSystemWallet: true }).lean();
     }
 };

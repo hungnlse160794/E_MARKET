@@ -35,12 +35,14 @@ export const productService = {
         // 1. Phân quyền: ShopOwner được tạo cho shop mình, Admin được tạo cho mọi shop
         PERMISSION_UTIL.verifyShopOwnership(shopId, requestUser);
 
-        // 2. Kiểm tra trùng Slug trong cùng 1 Chi nhánh (Chống Spam URL)
-        const slug = GENERATE_UTILS.generateSlug(name);
-        const existingProduct = await PRODUCT_REPOSITORY.findByBranchAndSlug(productData.branchId, slug);
-        if (existingProduct) {
-            throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Sản phẩm này đã tồn tại trong gian hàng của bạn']);
-        }
+        // 2. Sinh Slug Độc nhất dựa trên tên + 4 số cuối của BranchID và ShopID
+        const baseSlug = GENERATE_UTILS.generateSlug(name);
+        const slug = `${baseSlug}-b${String(branchId).slice(-4)}s${String(shopId).slice(-4)}`;
+        
+        const existingProduct = await PRODUCT_REPOSITORY.findBySlug(slug);
+        const uniqueSlugName = existingProduct 
+            ? `${slug}-${Math.random().toString(36).substring(7)}` 
+            : slug;
 
         // 3. Xử lý An toàn HTML cho mô tả sản phẩm (Chống Stored XSS)
         const sanitizedDescription = sanitizeHtml(description);
@@ -48,7 +50,7 @@ export const productService = {
         // 4. Tạo Product mới
         const product = await PRODUCT_REPOSITORY.create({
             ...productData,
-            slug,
+            slug: uniqueSlugName,
             description: sanitizedDescription
         });
 
@@ -58,8 +60,8 @@ export const productService = {
         return product;
     },
 
-    getProductById: async (productId) => {
-        const product = await PRODUCT_REPOSITORY.findById(productId);
+    getProductById: async (idOrSlug) => {
+        const product = await PRODUCT_REPOSITORY.findByIdOrSlug(idOrSlug);
         if (!product) throw new ApiError(ERROR_CODES.PRODUCT_NOT_FOUND);
         return product;
     },
@@ -67,6 +69,10 @@ export const productService = {
     getBranchProducts: async (branchId, options, filters = {}) => {
         // Tích hợp phân trang (Pagination) chuẩn model đã audit
         return await PRODUCT_REPOSITORY.paginateByBranchId(branchId, options, filters);
+    },
+
+    getAllProducts: async (options, filters = {}) => {
+        return await PRODUCT_REPOSITORY.paginateGlobal(options, filters);
     },
 
     updateProduct: async (productId, updateData, requestUser) => {
