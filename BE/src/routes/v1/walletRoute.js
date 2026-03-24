@@ -138,8 +138,34 @@ router.post(
 router.post(
     '/transactions/:txnId/review',
     apiRateLimiter,
-    allowRoles(COMMON_CONSTANTS.USER_ROLE.PLATFORM_ADMIN),
+    allowRoles(COMMON_CONSTANTS.USER_ROLE.PLATFORM_ADMIN, COMMON_CONSTANTS.USER_ROLE.SUPER_ADMIN),
     walletController.reviewWithdrawal
+);
+
+/**
+ * @swagger
+ * /wallets/system-wallet:
+ *   get:
+ *     summary: Lấy dữ liệu Ví Sàn (Only Super Admin)
+ *     tags: [Wallets]
+ */
+router.get(
+    '/system-wallet',
+    allowRoles(COMMON_CONSTANTS.USER_ROLE.SUPER_ADMIN),
+    walletController.getSystemWallet
+);
+
+/**
+ * @swagger
+ * /wallets/{id}/bank-info:
+ *   patch:
+ *     summary: Cập nhật thông tin ngân hàng (Shop Owner hoặc Super Admin cho Ví Sàn)
+ *     tags: [Wallets]
+ */
+router.patch(
+    '/:id/bank-info',
+    apiRateLimiter,
+    walletController.updateBankInfo
 );
 
 export default router;

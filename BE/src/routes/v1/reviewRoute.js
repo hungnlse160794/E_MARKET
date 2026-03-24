@@ -46,6 +46,7 @@ const router = express.Router();
 router.post(
     '/',
     authHandlingMiddleware,
+    // policiesHandlingMiddleware(['CUSTOMER']), // Giả định chỉ khách hàng mới được đánh giá
     apiRateLimiter,
     sanitizeRequest(
         GENERATE_UTILS.extractFieldsFromJoi(reviewValidation.createReview.body),

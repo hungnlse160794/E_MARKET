@@ -3,10 +3,12 @@ import { useParams, Link } from "react-router-dom"
 import { 
   Star, 
   ShoppingBag, 
-  ShieldCheck, 
   Zap,
   Info,
-  ArrowLeft
+  ArrowLeft,
+  Store,
+  MessageCircle,
+  CheckCircle2
 } from "lucide-react"
 import { useProduct } from "./hooks/useProducts"
 import { useCart } from "../cart/hooks/useCart"
@@ -16,14 +18,14 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { motion } from "framer-motion"
+import { ReviewSection } from "./components/ReviewSection"
 
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, error } = useProduct(slug || "");
   
   // Cart integration
-  const roomCode = localStorage.getItem("cart_room_code") || undefined;
-  const { addItem, isAdding } = useCart(roomCode);
+  const { addItem, isAdding } = useCart();
   
   const [activeImage, setActiveImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -43,8 +45,9 @@ export default function ProductDetailPage() {
         // branchId: product.branchId // Some products might not have a branchId yet
       });
       toast.success(`Đã thêm ${quantity} ${unit.unitName} vào giỏ hàng!`);
-    } catch {
-      toast.error("Không thể thêm vào giỏ hàng. Hãy tham gia phòng trước.");
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Không thể thêm vào giỏ hàng.";
+      toast.error(errorMessage);
     }
   };
 
@@ -84,9 +87,14 @@ export default function ProductDetailPage() {
   }
 
   const selectedUnit = product.units[selectedUnitIndex];
+  const shop = typeof product.shopId === 'object' ? product.shopId : null;
 
   return (
-    <div className="bg-[#FAF9F7] min-h-screen font-sans text-[#1a1f2c] pt-[90px]">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="bg-[#FAF9F7] min-h-screen font-sans text-[#1a1f2c] pt-[90px]"
+    >
       
       {/* Dynamic Header */}
       <div className="max-w-[1400px] mx-auto px-6 lg:px-12 pt-8">
@@ -97,152 +105,205 @@ export default function ProductDetailPage() {
 
       {/* Top Section */}
       <main className="max-w-[1400px] mx-auto px-6 lg:px-12 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_500px] gap-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           
-          {/* Left: Gallery */}
-          <div className="flex gap-6 h-[700px]">
-            {/* Thumbnails */}
-            <div className="flex flex-col gap-4 w-24 shrink-0 overflow-y-auto pr-2 no-scrollbar">
-              {product.images.map((img, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => setActiveImage(idx)}
-                  className={`w-24 h-[120px] bg-white transition duration-300 p-1 flex items-center justify-center relative overflow-hidden rounded-lg group ${activeImage === idx ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#FAF9F7]' : 'opacity-70 hover:opacity-100 border border-slate-100'}`}
-                >
-                  <img src={img} alt={`thumb-${idx}`} className="w-full h-full object-cover rounded-md group-hover:scale-110 transition-transform duration-500" />
-                </button>
-              ))}
-            </div>
-            
-            {/* Main Image */}
+          {/* Left: Gallery (Compact) */}
+          <div className="lg:col-span-5 flex flex-col gap-5">
+            {/* Main Image Container (Shrink aspect ratio) */}
             <motion.div 
-              key={activeImage}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex-1 bg-white relative flex items-center justify-center h-full rounded-2xl overflow-hidden border border-slate-100 shadow-xl shadow-slate-200/50"
+               layoutId="main-product-image"
+               className="bg-white relative flex items-center justify-center aspect-square rounded-[24px] overflow-hidden border border-slate-100 shadow-xl shadow-slate-200/50"
             >
-              <img 
+              <motion.img 
+                key={activeImage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 src={product.images[activeImage]} 
                 alt={product.name} 
                 className="w-full h-full object-cover"
               />
             </motion.div>
-          </div>
 
-          {/* Right: Details */}
-          <div className="flex flex-col justify-start pt-4">
-            
-            <div className="flex items-center gap-4 mb-6">
-               <Badge variant="secondary" className="bg-indigo-50 text-indigo-600 border-none font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-lg">
-                  {typeof product.categoryId === 'object' ? product.categoryId.name : product.categoryId}
-               </Badge>
-               <div className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500">
-                 <Star size={14} className="fill-amber-400 text-amber-400" />
-                 <span>{product.rating} (Đánh giá tuyệt vời)</span>
-               </div>
-            </div>
-            
-            <h1 className="text-4xl font-bold text-slate-900 mb-6 leading-tight">
-              {product.name}
-            </h1>
-            
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-8">
-               <div className="flex flex-col gap-1 mb-6">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Giá niêm yết</span>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-4xl font-black text-slate-900">{formatCurrency(selectedUnit.price)}</span>
-                    <span className="text-[14px] text-slate-400 font-bold">/ {selectedUnit.unitName}</span>
-                  </div>
-               </div>
-               
-               <div className="flex items-center gap-2 text-[12px] text-emerald-600 font-bold bg-emerald-50 px-4 py-2 rounded-xl w-fit">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Sẵn sàng giao ngay trong 30-45 phút</span>
-               </div>
-            </div>
-
-            {/* Units Selection */}
-            <div className="mb-8">
-               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">
-                 LỰA CHỌN ĐƠN VỊ
-               </div>
-               <div className="flex flex-wrap gap-3">
-                  {product.units.map((unit, idx) => (
-                    <button 
-                      key={unit.unitName} 
-                      onClick={() => setSelectedUnitIndex(idx)}
-                      className={`px-8 h-14 flex items-center justify-center text-[13px] font-black tracking-widest rounded-2xl transition-all border ${selectedUnitIndex === idx ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 text-slate-600 hover:border-slate-300 shadow-sm'}`}
+            {/* Depth Frame for Thumbnails (No border, pure depth) */}
+            <div className="bg-slate-100/50 p-4 rounded-[28px] shadow-inner mt-4">
+               <div className="flex flex-wrap gap-4">
+                  {product.images.map((img, idx) => (
+                    <motion.button 
+                      key={idx}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setActiveImage(idx)}
+                      className={`w-14 h-14 shrink-0 bg-white p-1 rounded-xl shadow-md transition-all duration-300 ${activeImage === idx ? 'scale-110 shadow-lg shadow-black/10' : 'opacity-60 hover:opacity-100'}`}
                     >
-                      {unit.unitName.toUpperCase()}
-                    </button>
+                      <img src={img} alt={`thumb-${idx}`} className="w-full h-full object-cover rounded-lg" />
+                    </motion.button>
                   ))}
                </div>
             </div>
-
-            {/* Quantity selection */}
-            <div className="mb-10">
-               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">
-                 SỐ LƯỢNG
+          </div>
+ 
+          {/* Right: Details & Info (Special Redesign) */}
+          <div className="lg:col-span-7 flex flex-col justify-start pt-1">
+            
+            <motion.div 
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="flex items-center gap-3 mb-6"
+            >
+               <Badge className="bg-indigo-600 text-white border-none font-black text-[9px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-full shadow-lg shadow-indigo-100">
+                  {typeof product.categoryId === 'object' ? product.categoryId.name : product.categoryId}
+               </Badge>
+               <div className="h-4 w-px bg-slate-200" />
+               <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                 <Star size={12} className="fill-amber-400 text-amber-400" />
+                 <span>{product.rating} Rating</span>
                </div>
-               <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-fit">
-                  <button 
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-12 h-12 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-all font-bold text-lg"
+            </motion.div>
+            
+            <h1 className="text-4xl font-black text-slate-900 leading-[1.1] tracking-tight mb-8">
+              {product.name}
+            </h1>
+
+            <div className="space-y-8 bg-white/50 backdrop-blur-sm p-8 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30">
+               {/* Pricing Row */}
+               <div className="flex items-end justify-between border-b border-slate-100 pb-8">
+                  <div className="space-y-1">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Giá Ưu Đãi</span>
+                     <div className="flex items-baseline gap-2">
+                       <span className="text-4xl font-black text-slate-900 tracking-tighter">{formatCurrency(selectedUnit.price)}</span>
+                       <span className="text-sm text-slate-400 font-bold uppercase tracking-widest">/ {selectedUnit.unitName}</span>
+                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-black bg-emerald-50 px-4 py-2 rounded-full uppercase tracking-widest mb-1">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" />
+                     <span>Flash Delivery</span>
+                  </div>
+               </div>
+
+               {/* Units & Quantity Group */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-5">Đơn vị tính</div>
+                     <div className="flex flex-wrap gap-2">
+                        {product.units.map((unit, idx) => (
+                          <motion.button 
+                            key={unit.unitName} 
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setSelectedUnitIndex(idx)}
+                            className={`px-5 h-11 flex items-center justify-center text-[11px] font-black tracking-widest rounded-xl transition-all border ${selectedUnitIndex === idx ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-800'}`}
+                          >
+                            {unit.unitName.toUpperCase()}
+                          </motion.button>
+                        ))}
+                     </div>
+                  </div>
+
+                  <div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-5">Số lượng</div>
+                     <div className="flex items-center gap-4 bg-slate-50 p-1.5 rounded-xl border border-slate-100 w-fit">
+                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-white transition-all font-bold">−</button>
+                        <span className="text-sm font-black w-8 text-center tabular-nums">{quantity}</span>
+                        <button onClick={() => setQuantity(quantity + 1)} className="w-8 h-8 rounded-lg bg-white text-slate-900 hover:bg-slate-900 hover:text-white transition-all font-bold shadow-sm">+</button>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Final Actions */}
+               <div className="flex gap-4 pt-2">
+                  <Button 
+                    onClick={handleAddToCart}
+                    disabled={isAdding || product.status === 'OUT_OF_STOCK'}
+                    className="flex-1 h-16 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 transition-all gap-3"
                   >
-                    −
-                  </button>
-                  <span className="text-xl font-bold w-12 text-center tabular-nums">{quantity}</span>
-                  <button 
-                    onClick={() => setQuantity(quantity + 1)}
-                    className="w-12 h-12 rounded-xl bg-slate-900 text-white hover:bg-black transition-all font-bold text-lg shadow-lg"
+                    <ShoppingBag size={18} />
+                    {isAdding ? 'Đang thêm...' : 'THÊM VÀO GIỎ'}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-16 h-16 rounded-2xl border-slate-200 text-slate-800 hover:border-slate-900 transition-all"
                   >
-                    +
-                  </button>
+                     <Zap size={20} className="fill-amber-400 text-amber-400 border-none" />
+                  </Button>
                </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-4 mb-10">
-              <Button 
-                onClick={handleAddToCart}
-                disabled={isAdding || product.status === 'OUT_OF_STOCK'}
-                className="flex-1 h-20 bg-indigo-600 hover:bg-indigo-700 text-white rounded-3xl text-[14px] font-black uppercase tracking-widest shadow-2xl shadow-indigo-200 transition-all gap-3 overflow-hidden group"
-              >
-                <ShoppingBag size={20} className="group-hover:scale-110 transition-transform" />
-                {isAdding ? 'ĐANG XỬ LÝ...' : 'THÊM VÀO GIỎ'}
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-20 h-20 rounded-3xl border-slate-200 text-slate-800 hover:bg-white hover:border-slate-400 transition-all shadow-sm"
-              >
-                 <Zap size={24} className="fill-amber-400 text-amber-400 border-none" />
-              </Button>
-            </div>
-
-            {/* Safety Blocks */}
-            <div className="grid grid-cols-2 gap-4 mb-2">
-               <div className="p-6 rounded-4xl bg-white border border-slate-50 flex items-center gap-4 shadow-sm">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                     <ShieldCheck size={20} />
-                  </div>
-                  <div className="space-y-0.5">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ĐẢM BẢO</p>
-                     <p className="text-[12px] font-bold text-slate-700">Chính hãng 100%</p>
-                  </div>
-               </div>
-               <div className="p-6 rounded-4xl bg-white border border-slate-50 flex items-center gap-4 shadow-sm">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-                     <Zap size={20} />
-                  </div>
-                  <div className="space-y-0.5">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GIAO NHANH</p>
-                     <p className="text-[12px] font-bold text-slate-700">Trong nội thành</p>
-                  </div>
-               </div>
-            </div>
           </div>
         </div>
+
+        {/* Marketplace Shop Profile Section (Inside Main - Much closer) */}
+        {shop && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-12 bg-white rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/40 p-10 overflow-hidden relative group"
+          >
+            <div className="absolute top-0 right-0 w-1/3 h-full bg-indigo-50/20 rounded-l-full blur-3xl z-0" />
+            
+            <div className="relative z-10 flex flex-col lg:flex-row items-center gap-12">
+               {/* Shop Identity */}
+               <div className="flex items-center gap-6 pr-10 lg:border-r border-slate-100">
+                  <div className="relative shrink-0">
+                    <div className="w-24 h-24 rounded-[24px] overflow-hidden border-4 border-slate-50 shadow-xl">
+                       <img src={shop.logo || "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&q=80&w=200"} alt={shop.name} className="w-full h-full object-cover" />
+                    </div>
+                    <Badge className="absolute -bottom-1 -right-1 bg-indigo-600 text-white border-2 border-white px-1.5 py-0 rounded text-[9px] font-black">MALL</Badge>
+                  </div>
+                  <div className="space-y-3">
+                     <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                           <h2 className="text-2xl font-black text-slate-900 tracking-tight">{shop.name}</h2>
+                           <CheckCircle2 size={20} className="text-indigo-500" />
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Premium Partner</p>
+                     </div>
+                     <div className="flex gap-2">
+                        <Button variant="outline" className="h-10 px-4 rounded-xl border-indigo-600 text-indigo-600 font-bold text-[11px] hover:bg-indigo-50 gap-2">
+                           <MessageCircle size={14} /> CHAT
+                        </Button>
+                        <Button className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-lg shadow-indigo-100 gap-2">
+                           <Store size={14} /> XEM SHOP
+                        </Button>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Metrics Container */}
+               <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-10">
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đánh giá Shop</p>
+                     <p className="text-md font-black text-slate-900">4.8 <span className="text-xs font-medium text-slate-300">(1.2k)</span></p>
+                  </div>
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tổng sản phẩm</p>
+                     <p className="text-md font-black text-slate-900">156</p>
+                  </div>
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tỉ lệ phản hồi</p>
+                     <p className="text-md font-black text-slate-900">98%</p>
+                  </div>
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thời gian phản hồi</p>
+                     <p className="text-md font-black text-slate-900">Vài giờ</p>
+                  </div>
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thành viên từ</p>
+                     <p className="text-md font-black text-slate-900">2 năm trước</p>
+                  </div>
+                  <div className="space-y-0.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Followers</p>
+                     <p className="text-md font-black text-slate-900">5.4k</p>
+                  </div>
+               </div>
+            </div>
+          </motion.div>
+        )}
       </main>
+
+
+
+
 
       {/* Description Section */}
       <section className="bg-white border-y border-slate-100 py-20 mt-12">
@@ -261,6 +322,13 @@ export default function ProductDetailPage() {
                   </ul>
                </div>
             </div>
+         </div>
+      </section>
+
+      {/* Reviews Section */}
+      <section className="bg-white py-24">
+         <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
+            <ReviewSection productId={product._id} />
          </div>
       </section>
 
@@ -286,6 +354,6 @@ export default function ProductDetailPage() {
             </div>
          </div>
       </section>
-    </div>
+    </motion.div>
   )
 }

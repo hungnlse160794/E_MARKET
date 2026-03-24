@@ -74,7 +74,7 @@ export const useCreateStaff = () => {
       },
       onSuccess: () => {
          toast.success("Tạo tài khoản nhân viên thành công");
-         queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+         queryClient.invalidateQueries({ queryKey: ["staff"] });
       },
       onError: (err) => {
          const message = err.response?.data?.message || err.message || "Không thể tạo tài khoản";
@@ -102,7 +102,7 @@ export const useUpdateStaff = () => {
        },
        onSuccess: () => {
           toast.success("Cập nhật tài khoản thành công");
-          queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+          queryClient.invalidateQueries({ queryKey: ["staff"] });
        },
        onError: (err) => {
           const message = err.response?.data?.message || err.message || "Không thể cập nhật tài khoản";
@@ -128,9 +128,11 @@ export const useUpdateManagedBranches = () => {
           );
           return response.data;
        },
-       onSuccess: () => {
+       onSuccess: (_, variables) => {
           toast.success("Cập nhật chi nhánh quản lý thành công");
-          queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+          queryClient.invalidateQueries({ queryKey: ["staff"] });
+          // Đảm bảo cache detail của chính user đó bị xóa/refetch
+          queryClient.invalidateQueries({ queryKey: ["staff", "detail", variables.userId] });
        },
        onError: (err) => {
           const message = err.response?.data?.message || err.message || "Không thể cập nhật";
@@ -154,7 +156,7 @@ export const useDeleteStaff = () => {
        },
        onSuccess: () => {
           toast.success("Xóa tài khoản thành công");
-          queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+          queryClient.invalidateQueries({ queryKey: ["staff"] });
        },
        onError: (err) => {
           const message = err.response?.data?.message || err.message || "Không thể xóa tài khoản";

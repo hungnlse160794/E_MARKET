@@ -1,17 +1,8 @@
 import { useState, useMemo } from "react"
 import { useProducts } from "./hooks/useProducts"
-import { useCategories } from "./hooks/useCategories"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { Checkbox } from "@/components/ui/checkbox"
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select"
 import { 
   LayoutGrid, 
   List, 
@@ -20,10 +11,16 @@ import {
   Star, 
   Heart,
   X,
-  ChevronDown,
   ShoppingBag,
   ArrowUpDown
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -31,33 +28,29 @@ import { Link } from "react-router-dom"
 import type { IProductFilter, IProduct } from "./types"
 import { formatPrice } from "@/utils/format"
 import { useAuthStore } from "@/stores/useAuthStore"
-import { useBranches } from "@/features/branch/hooks/useBranches"
-
+import { useCart } from "@/features/cart/hooks/useCart"
+import { QuickAddModal } from "./components/QuickAddModal"
+import { toast } from "sonner"
+import { PATHS } from "@/routes/paths"
 
 export default function ProductListPage() {
   const { user } = useAuthStore();
   const isBranchManager = user?.role === 'BRANCH_MANAGER';
-  const isShopOwner = user?.role === 'SHOP_OWNER';
 
   const getBranchId = (branch: string | { _id: string } | null | undefined) => {
     if (!branch) return null;
     return typeof branch === 'string' ? branch : branch._id || null;
   };
 
-  const { data: branchesData } = useBranches();
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
-
   const activeBranchId = useMemo(() => {
     if (isBranchManager) return getBranchId(user?.branchId);
-    if (selectedBranchId) return selectedBranchId;
-    if (isShopOwner && branchesData?.branches?.length) {
-       const sorted = [...branchesData.branches].sort((a, b) => a.branchName.localeCompare(b.branchName));
-       return sorted[0]._id;
-    }
-    return null;
-  }, [isBranchManager, user?.branchId, selectedBranchId, isShopOwner, branchesData]);
+    return null; // Global view for others
+  }, [isBranchManager, user?.branchId]);
+
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [quickAddProduct, setQuickAddProduct] = useState<IProduct | null>(null);
+  const { addItem, isAdding } = useCart();
   const [filter, setFilter] = useState<IProductFilter>({
     page: 1,
     limit: 12,
@@ -65,7 +58,6 @@ export default function ProductListPage() {
   });
 
   const { data: productsData, isLoading } = useProducts(activeBranchId, filter);
-  const { data: categories } = useCategories(activeBranchId);
 
   const [localPriceRange, setLocalPriceRange] = useState<number[]>([filter.minPrice || 0, filter.maxPrice || 50000000]);
 
@@ -77,11 +69,25 @@ export default function ProductListPage() {
     setFilter(prev => ({ ...prev, minPrice: values[0], maxPrice: values[1] }));
   };
 
-  const handleCategoryToggle = (catId: string) => {
-    setFilter(prev => ({
-      ...prev,
-      category: prev.category === catId ? undefined : catId
-    }));
+  const handleQuickAdd = async (unitName: string, quantity: number) => {
+    const branchToUse = activeBranchId || (typeof quickAddProduct?.branchId === 'object' ? quickAddProduct?.branchId._id : quickAddProduct?.branchId);
+    
+    if (!quickAddProduct || !branchToUse) {
+      toast.error("Vui lòng chọn chi nhánh trước khi mua hàng");
+      return;
+    }
+    
+    try {
+      await addItem({
+        productId: quickAddProduct._id,
+        branchId: typeof branchToUse === 'string' ? branchToUse : '',
+        unitName,
+        quantity
+      });
+      setQuickAddProduct(null);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Không thể thêm vào giỏ hàng");
+    }
   };
 
   const activeFiltersCount = useMemo(() => {
@@ -95,7 +101,14 @@ export default function ProductListPage() {
 
   const getCategoryName = (id: string | { _id: string; name: string }) => {
     if (typeof id === 'object' && id !== null) return id.name;
-    return categories?.find(c => c._id === id)?.name || (typeof id === 'string' ? id : 'Không rõ');
+    return typeof id === 'string' ? id : 'Không rõ';
+  };
+
+  const getBranchDisplay = (branch: IProduct['branchId']) => {
+    if (typeof branch === 'object' && branch !== null) {
+      return { id: branch._id, name: branch.branchName };
+    }
+    return { id: branch as string, name: 'Chi nhánh mặc định' };
   };
 
   const clearFilters = () => {
@@ -120,25 +133,11 @@ export default function ProductListPage() {
             </h1>
             <p className="text-slate-500 font-semibold tracking-wide flex items-center gap-3">
               <span className="h-2 w-2 rounded-full bg-indigo-500 shadow-lg shadow-indigo-200" />
-              {isLoading ? 'Đang cập nhật sản phẩm...' : `Tìm thấy ${productsData?.docs.length || 0} sản phẩm trong kho`}
+              {isLoading ? 'Đang cập nhật sản phẩm...' : `Tìm thấy ${productsData?.totalDocs || 0} sản phẩm trong hệ thống`}
             </p>
           </div>
           
           <div className="flex items-center gap-3">
-             {isShopOwner && (
-               <Select value={activeBranchId || ""} onValueChange={setSelectedBranchId}>
-                 <SelectTrigger className="h-12 w-[240px] px-6 bg-white border-slate-200 rounded-2xl font-black text-[11px] uppercase tracking-widest focus:ring-4 focus:ring-indigo-500/10 transition-all cursor-pointer">
-                   <SelectValue placeholder="Chọn chi nhánh" />
-                 </SelectTrigger>
-                 <SelectContent className="rounded-2xl p-2 border-slate-100 shadow-2xl bg-white">
-                   {branchesData?.branches?.map(b => (
-                     <SelectItem key={b._id} value={b._id} className="rounded-xl py-3 font-black text-[10px] uppercase tracking-widest cursor-pointer hover:bg-slate-50">
-                       {b.branchName}
-                     </SelectItem>
-                   ))}
-                 </SelectContent>
-               </Select>
-             )}
              <div className="relative w-full md:w-80 group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                 <Input 
@@ -161,29 +160,12 @@ export default function ProductListPage() {
         <div className="flex gap-10">
           {/* Desktop Sidebar Filters */}
           <aside className="hidden md:block w-72 shrink-0 space-y-10">
-            {/* Category Filter */}
+            {/* Category Filter Info */}
             <div className="space-y-5">
               <h3 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-400 flex items-center gap-2 mb-4">
                 Danh Mục
-                <ChevronDown size={14} className="text-slate-300" />
               </h3>
-              <div className="space-y-3">
-                {categories?.map((cat) => (
-                  <label 
-                    key={cat._id}
-                    className="flex items-center gap-3 group cursor-pointer"
-                  >
-                    <Checkbox 
-                      checked={filter.category === cat._id}
-                      onCheckedChange={() => handleCategoryToggle(cat._id)}
-                      className="rounded-md border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
-                    />
-                    <span className={`text-[14px] font-medium transition-colors ${filter.category === cat._id ? 'text-indigo-600' : 'text-slate-500 group-hover:text-slate-800'}`}>
-                      {cat.name}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <p className="text-[13px] text-slate-400 font-medium italic leading-relaxed">Sử dụng thanh tìm kiếm phía trên để lọc sản phẩm nhanh chóng</p>
             </div>
 
             {/* Price Filter */}
@@ -257,7 +239,7 @@ export default function ProductListPage() {
           {/* Product Grid Area */}
           <section className="flex-1 space-y-8">
             {/* Toolbar */}
-            <div className="flex items-center justify-between p-5 bg-white rounded-[2rem] border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)] backdrop-blur-md">
+            <div className="flex items-center justify-between p-5 bg-white rounded-4xl border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)] backdrop-blur-md">
                <div className="flex items-center gap-2">
                   <Button 
                     variant={view === 'grid' ? 'secondary' : 'ghost'} 
@@ -305,7 +287,7 @@ export default function ProductListPage() {
             {isLoading ? (
                <div className={`grid gap-8 ${view === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
                   {[1,2,3,4,5,6].map(i => (
-                    <div key={i} className="bg-white rounded-[2rem] p-6 border border-slate-100 space-y-4">
+                    <div key={i} className="bg-white rounded-4xl p-6 border border-slate-100 space-y-4">
                        <Skeleton className="aspect-square w-full rounded-2xl" />
                        <div className="space-y-2">
                           <Skeleton className="h-4 w-24" />
@@ -337,7 +319,7 @@ export default function ProductListPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.4 }}
-                      className={`group bg-white rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.06)] transition-all duration-500 flex ${view === 'grid' ? 'flex-col' : 'flex-row gap-8'} overflow-hidden relative shadow-sm`}
+                      className={`group bg-white rounded-4xl border border-slate-200 hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.06)] transition-all duration-500 flex ${view === 'grid' ? 'flex-col' : 'flex-row gap-8'} overflow-hidden relative shadow-sm`}
                     >
                        <Link to={`/product/${product.slug}`} className={`relative overflow-hidden shrink-0 ${view === 'grid' ? 'aspect-square' : 'w-64 aspect-square'}`}>
                           <img 
@@ -369,11 +351,22 @@ export default function ProductListPage() {
                                    <span className="text-[12px] font-bold text-slate-700">{product.rating}</span>
                                 </div>
                              </div>
-                             <Link to={`/product/${product.slug}`}>
-                                 <h3 className="text-[17px] font-black text-slate-900 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors duration-300">
-                                   {product.name}
-                                 </h3>
-                             </Link>
+                             <div className="flex flex-col gap-1">
+                                <Link to={`/product/${product.slug}`}>
+                                    <h3 className="text-[17px] font-black text-slate-900 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors duration-300">
+                                      {product.name}
+                                    </h3>
+                                </Link>
+                                <div className="flex items-center gap-1.5 py-1">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                   <Link 
+                                      to={PATHS.BRANCH_DETAIL.replace(':id', getBranchDisplay(product.branchId).id)} 
+                                      className="text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors"
+                                   >
+                                      {getBranchDisplay(product.branchId).name}
+                                   </Link>
+                                </div>
+                             </div>
                              <p className="text-[13px] text-slate-600 line-clamp-2 leading-relaxed font-semibold">
                                 {product.description}
                              </p>
@@ -384,7 +377,14 @@ export default function ProductListPage() {
                                 <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Giá chỉ từ</span>
                                 <span className="text-2xl font-black text-slate-900 tracking-tight">{product.units?.[0]?.price !== undefined ? formatPrice(product.units[0].price) : "Liên hệ"}</span>
                              </div>
-                              <Button className="h-12 w-12 rounded-2xl bg-linear-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 shadow-xl shadow-indigo-200/50 shrink-0 group/btn transition-all duration-300 hover:scale-105 active:scale-95 border border-indigo-400/30 overflow-hidden">
+                              <Button 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setQuickAddProduct(product);
+                                }}
+                                disabled={product.status === 'OUT_OF_STOCK'}
+                                className="h-12 w-12 rounded-2xl bg-linear-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 shadow-xl shadow-indigo-200/50 shrink-0 group/btn transition-all duration-300 hover:scale-105 active:scale-95 border border-indigo-400/30 overflow-hidden"
+                              >
                                  <ShoppingBag size={20} className="text-white drop-shadow-sm group-hover:rotate-12 transition-transform" />
                               </Button>
                           </div>
@@ -415,6 +415,14 @@ export default function ProductListPage() {
         </div>
       </div>
 
+      <QuickAddModal 
+        isOpen={!!quickAddProduct}
+        onClose={() => setQuickAddProduct(null)}
+        product={quickAddProduct}
+        isAdding={isAdding}
+        onAdd={handleQuickAdd}
+      />
+
       {/* Mobile Filters Drawer */}
       <AnimatePresence>
         {showMobileFilters && (
@@ -434,32 +442,17 @@ export default function ProductListPage() {
                className="fixed top-0 right-0 bottom-0 w-[85%] max-w-sm bg-white z-[60] p-8 shadow-2xl md:hidden overflow-y-auto"
             >
                <div className="flex items-center justify-between mb-10">
-                  <h3 className="text-xl font-bold text-slate-800 font-serif">Bộ lọc</h3>
+                  <h3 className="text-xl font-bold text-slate-800">Bộ lọc</h3>
                   <Button variant="ghost" size="icon" onClick={() => setShowMobileFilters(false)} className="rounded-full">
                      <X size={24} />
                   </Button>
                </div>
                
                <div className="space-y-10">
-                  {/* Category Filter Mobile */}
-                  <div className="space-y-5">
+                  {/* Category Info Mobile */}
+                  <div className="space-y-4">
                     <h3 className="text-[13px] font-bold uppercase tracking-widest text-slate-800">Danh Mục</h3>
-                    <div className="grid grid-cols-1 gap-2">
-                      {categories?.map((cat) => (
-                        <button 
-                          key={cat._id}
-                          onClick={() => handleCategoryToggle(cat._id)}
-                          className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                            filter.category === cat._id 
-                              ? 'border-indigo-200 bg-indigo-50/30 text-indigo-600 shadow-sm' 
-                              : 'border-slate-100 text-slate-500'
-                          }`}
-                        >
-                          <span className="text-[14px] font-bold">{cat.name}</span>
-                          {filter.category === cat._id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-[14px] text-slate-400 font-medium italic">Sử dụng thanh tìm kiếm để lọc nhanh</p>
                   </div>
 
                   {/* Price Filter Mobile */}
@@ -524,7 +517,7 @@ export default function ProductListPage() {
                       onClick={() => { clearFilters(); setShowMobileFilters(false); }}
                       className="w-full h-14 rounded-2xl text-rose-500 hover:bg-rose-50 font-black text-[11px] gap-2 transition-all uppercase tracking-widest"
                     >
-                      Xóa tất cả ( {activeFiltersCount} )
+                      XÓA TẤT CẢ ( {activeFiltersCount} )
                     </Button>
                   )}
 
@@ -540,5 +533,5 @@ export default function ProductListPage() {
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }

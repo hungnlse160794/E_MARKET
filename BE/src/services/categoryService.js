@@ -10,11 +10,17 @@ export const categoryService = {
      * @description Tạo danh mục mới cho Chi nhánh
      */
     createCategory: async (categoryData, requestUser) => {
-        const { name, shopId, branchId, parentId } = categoryData;
+        let { name, shopId, branchId, parentId } = categoryData;
+
+        // Normalize parentId: "" to null
+        if (!parentId || parentId === '') {
+            parentId = null;
+            categoryData.parentId = null;
+        }
 
         // 1. Chặn Admin theo yêu cầu người dùng
         if (requestUser.role === COMMON_CONSTANTS.USER_ROLE.PLATFORM_ADMIN) {
-             throw new ApiError(ERROR_CODES.FORBIDDEN, ['Admin không có quyền quản lý danh mục của chi nhánh']);
+            throw new ApiError(ERROR_CODES.FORBIDDEN, ['Admin không có quyền quản lý danh mục của chi nhánh']);
         }
 
         // 2. Validate ràng buộc (Phải có shopId và branchId)
@@ -64,6 +70,10 @@ export const categoryService = {
      * @description Cập nhật danh mục chi nhánh
      */
     updateCategory: async (id, updateData, requestUser) => {
+        // Normalize parentId: "" to null
+        if (updateData.parentId === '') {
+            updateData.parentId = null;
+        }
         const category = await CATEGORY_REPOSITORY.findById(id);
         if (!category) throw new ApiError(ERROR_CODES.CATEGORY_NOT_FOUND);
 

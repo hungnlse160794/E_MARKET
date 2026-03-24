@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
     CREATE_ACCOUNT: (shopId: string) => `/shops/${shopId}/accounts`,
   },
   PRODUCTS: {
+    ALL: "/products",
     LIST_BY_BRANCH: (branchId: string) => `/products/branch/${branchId}`,
     CREATE: "/products",
     DETAIL: (id: string) => `/products/${id}`,
@@ -51,11 +52,13 @@ export const API_ENDPOINTS = {
     DELETE: (id: string) => `/categories/${id}`,
   },
   CART: {
-    GET: (roomCode: string) => `/cart/${roomCode}`,
+    GET: "/cart",
     JOIN: "/cart/join",
-    ADD_ITEM: (roomCode: string) => `/cart/${roomCode}/items`,
-    UPDATE_ITEM: (roomCode: string, itemId: string) => `/cart/${roomCode}/items/${itemId}`,
-    REMOVE_ITEM: (roomCode: string, itemId: string) => `/cart/${roomCode}/items/${itemId}`,
+    SHARE: "/cart/share",
+    LEAVE: (cartId: string) => `/cart/leave/${cartId}`,
+    ADD_ITEM: "/cart/items",
+    UPDATE_ITEM: (cartId: string, itemId: string) => `/cart/${cartId}/items/${itemId}`,
+    REMOVE_ITEM: (cartId: string, itemId: string) => `/cart/${cartId}/items/${itemId}`,
   },
   VOUCHERS: {
     PLATFORM: "/vouchers/platform",

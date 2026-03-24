@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Product } from '#models/productModel.js';
 
 export const PRODUCT_REPOSITORY = {
@@ -7,7 +8,25 @@ export const PRODUCT_REPOSITORY = {
     },
 
     findById: async (productId) => {
-        return await Product.findOne({ _id: productId, isDeleted: false })
+        return await Product.findOne({ _id: productId, isDeleted: { $ne: true } })
+            .populate([
+                { path: 'shopId', select: 'name logo' },
+                { path: 'branchId', select: 'branchName address contactPhone' },
+                { path: 'categoryId', select: 'name' }
+            ])
+            .lean();
+    },
+
+    findBySlug: async (slug) => {
+        return await Product.findOne({ slug, isDeleted: { $ne: true } }).lean();
+    },
+
+    findByIdOrSlug: async (idOrSlug) => {
+        const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
+        const query = isObjectId ? { _id: idOrSlug } : { slug: idOrSlug };
+        query.isDeleted = { $ne: true };
+
+        return await Product.findOne(query)
             .populate([
                 { path: 'shopId', select: 'name logo' },
                 { path: 'branchId', select: 'branchName address contactPhone' },
@@ -17,31 +36,48 @@ export const PRODUCT_REPOSITORY = {
     },
 
     paginateByBranchId: async (branchId, options, filters = {}) => {
-        const query = { branchId, isDeleted: false };
+        return await PRODUCT_REPOSITORY.paginateGlobal(options, { ...filters, branchId });
+    },
 
-        // 1. Keyword search (Name or Description)
-        if (filters.search) {
-            query.$text = { $search: filters.search };
+    paginateGlobal: async (options, filters = {}) => {
+        // console.log('DEBUG: paginateGlobal filters:', filters);
+        const query = { isDeleted: { $ne: true } };
+
+        // 0. Optional Branch filter
+        if (filters.branchId) {
+            query.branchId = filters.branchId;
         }
 
-        // 2. Category filtering
-        if (filters.category) {
+        // 1. Keyword search (Name or Description)
+        if (filters.search && filters.search.trim() !== '') {
+             query.name = { $regex: filters.search.trim(), $options: 'i' };
+        }
+
+        // 2. Category filtering - Ensure valid ID
+        if (filters.category && filters.category !== 'all') {
             query.categoryId = filters.category;
         }
 
         // 3. Status filtering
         if (filters.status) {
             query.status = filters.status;
+        } else {
+             // For public view, we exclude HIDDEN but include AVAILABLE and OUT_OF_STOCK
+             query.status = { $ne: 'HIDDEN' };
         }
 
-        // 4. Price range filtering
-        if (typeof filters.minPrice === 'number' || typeof filters.maxPrice === 'number') {
-            const priceQuery = {};
-            if (typeof filters.minPrice === 'number') priceQuery.$gte = filters.minPrice;
-            if (typeof filters.maxPrice === 'number') priceQuery.$lte = filters.maxPrice;
+        // 4. Price range filtering - Robust number parsing
+        const minPrice = filters.minPrice ? Number(filters.minPrice) : null;
+        const maxPrice = filters.maxPrice ? Number(filters.maxPrice) : null;
 
-            // Check in units price since price is under units
-            query['units.price'] = priceQuery;
+        if (minPrice !== null || maxPrice !== null) {
+            const priceQuery = {};
+            if (minPrice !== null && !isNaN(minPrice)) priceQuery.$gte = minPrice;
+            if (maxPrice !== null && !isNaN(maxPrice)) priceQuery.$lte = maxPrice;
+
+            if (Object.keys(priceQuery).length > 0) {
+                query['units.price'] = priceQuery;
+            }
         }
 
         // 5. Rating filtering

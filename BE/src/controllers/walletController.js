@@ -49,5 +49,22 @@ export const walletController = {
             message: result.message,
             data: result
         });
+    }),
+
+    getSystemWallet: catchAsync(async (req, res) => {
+        const result = await walletService.getSystemWallet();
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    }),
+
+    updateBankInfo: catchAsync(async (req, res) => {
+        const result = await walletService.updateBankInfo(req.params.id, req.body.bankInfo, req.user);
+        res.status(200).json({
+            success: true,
+            message: 'Cập nhật thông tin ngân hàng thành công',
+            data: result
+        });
     })
 };

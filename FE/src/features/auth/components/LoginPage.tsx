@@ -2,7 +2,8 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Link } from "react-router-dom"
-import { Eye, EyeOff, Mail, Lock } from "lucide-react"
+import { PATHS } from "@/routes/paths"
+import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react"
 import { motion } from "framer-motion"
 
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,14 @@ export default function LoginPage() {
       transition={{ duration: 0.5 }}
       className="space-y-10 text-text-deep"
     >
+      <Link 
+        to={PATHS.HOME} 
+        className="inline-flex mb-4items-center gap-2 text-[12px] font-bold text-text-soft hover:text-primary-main transition-colors group"
+      >
+        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+        QUAY VỀ TRANG CHỦ
+      </Link>
+
       <div className="space-y-3">
         <h2 className="text-4xl font-serif font-bold tracking-tight">Chào mừng trở lại</h2>
         <p className="text-[15px] text-text-soft font-medium leading-relaxed">
@@ -60,7 +69,7 @@ export default function LoginPage() {
           <div className="space-y-2">
             <div className="flex justify-between items-center px-1">
                <label className="text-[12px] font-bold text-text-deep uppercase tracking-widest">Mật khẩu</label>
-               <Link to="/auth/recover-password" virtual-link="true" className="text-[12px] font-bold text-accent-terra hover:underline">Quên mật khẩu?</Link>
+               <Link to={PATHS.AUTH.RECOVER_PASSWORD} virtual-link="true" className="text-[12px] font-bold text-accent-terra hover:underline">Quên mật khẩu?</Link>
             </div>
             <div className="relative group">
                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary-main transition-colors">
@@ -119,13 +128,7 @@ export default function LoginPage() {
 
       <div className="text-center text-[14px] pt-4 font-medium">
          <span className="text-text-muted">Chưa có tài khoản? </span>
-         <Link to="/auth/register" className="text-primary-main font-bold hover:underline">Đăng ký ngay</Link>
-      </div>
-
-      <div className="bg-primary-extralight/50 p-6 rounded-2xl border border-border/40 text-center space-y-2">
-          <p className="text-[12px] font-bold text-text-deep uppercase tracking-widest">Bạn là người bán?</p>
-          <p className="text-[13px] text-text-soft font-medium">Bắt đầu kinh doanh cùng E-Market ngay hôm nay.</p>
-          <a href="#" className="inline-block pt-2 text-[13px] font-bold text-accent-terra hover:underline">Truy cập Seller Center →</a>
+         <Link to={PATHS.AUTH.REGISTER} className="text-primary-main font-bold hover:underline">Đăng ký ngay</Link>
       </div>
     </motion.div>
   )

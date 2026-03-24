@@ -1,4 +1,5 @@
 import { ParentOrder, SubOrder } from '#models/index.js';
+import { COMMON_CONSTANTS } from '#constants/common.js';
 
 export const ORDER_REPOSITORY = {
     // Parent Order
@@ -17,9 +18,9 @@ export const ORDER_REPOSITORY = {
 
     updateParentPaymentStatus: async (id, status, session = null) => {
         return await ParentOrder.findOneAndUpdate(
-           { _id: id, isDeleted: false }, 
-           { paymentStatus: status }, 
-           { new: true, session }
+            { _id: id, isDeleted: false },
+            { paymentStatus: status },
+            { new: true, session }
         ).lean();
     },
 
@@ -51,9 +52,26 @@ export const ORDER_REPOSITORY = {
 
     updateSubStatus: async (id, status, session = null) => {
         return await SubOrder.findOneAndUpdate(
-           { _id: id, isDeleted: false }, 
-           { status }, 
-           { new: true, session }
+            { _id: id, isDeleted: false },
+            { status },
+            { new: true, session }
         ).lean();
+    },
+
+    updateSubsPaymentStatusByParentId: async (parentOrderId, status, session = null) => {
+        return await SubOrder.updateMany(
+            { parentOrderId, isDeleted: false },
+            { paymentStatus: status },
+            { session }
+        );
+    },
+
+    findExpiredParents: async (minutesAgo = 20) => {
+        const timeoutDate = new Date(Date.now() - minutesAgo * 60 * 1000);
+        return await ParentOrder.find({
+            paymentStatus: COMMON_CONSTANTS.PAYMENT_STATUS.PENDING,
+            createdAt: { $lt: timeoutDate },
+            isDeleted: false
+        }).lean();
     }
 };

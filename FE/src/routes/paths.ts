@@ -1,8 +1,9 @@
 export const PATHS = {
   HOME: '/',
   AUTH: {
-    LOGIN: '/auth/login',
-    REGISTER: '/auth/register',
+    LOGIN: '/login',
+    REGISTER: '/register',
+    RECOVER_PASSWORD: '/recover-password',
   },
   DASHBOARD: '/dashboard',
   SHOP: '/shop',
@@ -18,6 +19,7 @@ export const PATHS = {
   BRANCHES: '/dashboard/branches',
   STAFF: '/dashboard/staff',
   INVENTORY: '/dashboard/inventory',
+  BRANCH_DETAIL: '/branch/:id',
   CART: '/cart',
   CHECKOUT: '/checkout',
   PRODUCTS: '/products',
@@ -26,5 +28,6 @@ export const PATHS = {
   WALLET: '/profile/wallet',
   MY_ORDERS: '/profile/orders',
   ORDER_DETAIL: '/profile/orders/:id',
+  VNPAY_RESULT: '/order/vnpay-result',
   NOT_FOUND: '*',
 } as const;

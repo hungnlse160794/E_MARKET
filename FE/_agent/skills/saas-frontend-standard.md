@@ -75,6 +75,25 @@ Bộ quy tắc này bắt buộc Antigravity tuân thủ khi phát triển các 
 </div>
 ```
 
+## 7. Marketplace UI/UX & Trust Patterns (Nano Banana Inspired)
+
+Dự án đang chuyển hướng sang mô hình **Marketplace (Sàn thương mại điện tử)**. Tất cả các components liên quan đến Shop/Branch/Vendor phải tuân thủ các tiêu chuẩn sau:
+
+- **Vendor Identification**: Shop/Branch không chỉ là text thông tin, mà phải là một "Thương hiệu" riêng biệt.
+- **Reliability Metrics (Chỉ số tin cậy)**: Bắt buộc hiển thị các chỉ số sau để xây dựng lòng tin:
+  - **Đánh giá (Ratings)**: Số sao và số lượng đánh giá.
+  - **Phản hồi (Response Rate)**: % phản hồi tin nhắn và thời gian phản hồi (ví dụ: "trong vòng vài giờ").
+  - **Sản phẩm (Products)**: Tổng số mặt hàng Shop đang kinh doanh.
+  - **Thời gian tham gia (Joined)**: Thời gian Shop đã hoạt động trên sàn.
+- **Trust Signals**: Sử dụng Badge "Verified", "Mall", hoặc "Yêu thích" để phân loại gian hàng chất lượng.
+- **Call to Actions (CTAs)**:
+  - Phải có nút "Xem Shop" (View Shop) để người dùng khám phá thêm sản phẩm.
+  - Nút "Chat Ngay" (Chat Now) để hỗ trợ trực tiếp.
+- **Aesthetics (Nano Banana Standard)**:
+  - Sử dụng bo góc lớn (`rounded-3xl` hoặc `rounded-4xl`).
+  - Đổ bóng nhẹ (`shadow-xl shadow-slate-200/50`) để tạo chiều sâu.
+  - Hiệu ứng hover cho Card Profile (ví dụ: scale nhẹ, đổi màu border).
+
 ---
 
-_Ghi chú: Mọi vi phạm quy tắc "Zero Any" hoặc "Loading Pattern" sẽ bị coi là code không đạt chuẩn._
+_Ghi chú: Mọi vi phạm quy tắc "Zero Any", "Loading Pattern", hoặc "Marketplace Standard" sẽ bị coi là code không đạt chuẩn._

@@ -145,8 +145,17 @@ export const productValidation = {
     getProductById: {
         params: Joi.object().keys({
             id: Joi.string().regex(REGEXP.OBJECT_ID).required().messages({
-                'string.pattern.base': 'ID không hợp lệ',
-                'any.required': 'ID sản phẩm là bắt buộc'
+                'string.pattern.base': 'Product ID không hợp lệ',
+                'any.required': 'Product ID là bắt buộc'
+            })
+        })
+    },
+
+    getProductByIdOrSlug: {
+        params: Joi.object().keys({
+            id: Joi.string().required().messages({
+                'string.empty': 'ID hoặc Slug sản phẩm không được để trống',
+                'any.required': 'ID hoặc Slug sản phẩm là bắt buộc'
             })
         })
     },
@@ -172,6 +181,20 @@ export const productValidation = {
             category: Joi.string().regex(REGEXP.OBJECT_ID).allow('', null).messages({
                 'string.pattern.base': 'Category ID không hợp lệ',
             }),
+            minPrice: Joi.number().min(0).allow('', null),
+            maxPrice: Joi.number().min(0).allow('', null),
+            status: Joi.string().valid(...Object.values(COMMON_CONSTANTS.PRODUCT_STATUS)).allow('', null),
+            sortBy: Joi.string().valid('newest', 'price-asc', 'price-desc', 'rating-desc').default('newest'),
+            rating: Joi.number().min(1).max(5).allow('', null)
+        })
+    },
+
+    getProducts: {
+        query: Joi.object().keys({
+            page: Joi.number().min(1).default(1),
+            limit: Joi.number().min(1).max(100).default(10),
+            search: Joi.string().allow('', null).trim(),
+            category: Joi.string().regex(REGEXP.OBJECT_ID).allow('', null),
             minPrice: Joi.number().min(0).allow('', null),
             maxPrice: Joi.number().min(0).allow('', null),
             status: Joi.string().valid(...Object.values(COMMON_CONSTANTS.PRODUCT_STATUS)).allow('', null),

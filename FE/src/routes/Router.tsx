@@ -25,11 +25,13 @@ const CartPage = lazy(() => import('@/features/cart/CartPage.tsx'));
 const CheckoutPage = lazy(() => import('@/features/order/CheckoutPage.tsx'));
 const ProductDetailPage = lazy(() => import('@/features/product/ProductDetailPage.tsx'));
 const ProductListPage = lazy(() => import('@/features/product/ProductListPage.tsx'));
+const BranchDetailPage = lazy(() => import('@/features/branch/BranchDetailPage.tsx'));
 const RecoverPasswordPage = lazy(() => import('@/features/auth/components/RecoverPasswordPage.tsx'));
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage.tsx'));
 const WalletPage = lazy(() => import('@/features/wallet/WalletPage.tsx'));
 const MyOrdersPage = lazy(() => import('@/features/order/OrderHistoryPage.tsx'));
 const OrderDetailPage = lazy(() => import('@/features/order/OrderDetailPage.tsx'));
+const VNPayResultPage = lazy(() => import('@/features/order/VNPayResultPage.tsx'));
 
 const router = createBrowserRouter([
   {
@@ -65,6 +67,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoading />}>
             <ProductDetailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PATHS.BRANCH_DETAIL,
+        element: (
+          <Suspense fallback={<PageLoading />}>
+            <BranchDetailPage />
           </Suspense>
         ),
       },
@@ -160,6 +170,14 @@ const router = createBrowserRouter([
             ),
           },
           {
+            path: PATHS.VNPAY_RESULT,
+            element: (
+              <Suspense fallback={<PageLoading />}>
+                <VNPayResultPage />
+              </Suspense>
+            ),
+          },
+          {
             path: PATHS.PROFILE,
             element: (
               <Suspense fallback={<PageLoading />}>
@@ -204,7 +222,7 @@ const router = createBrowserRouter([
     ],
   },
   {
-    path: '/auth',
+    path: '/',
     element: <AuthLayout />,
     children: [
       {

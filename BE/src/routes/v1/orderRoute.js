@@ -1,6 +1,7 @@
 import express from 'express';
 import { orderController } from '#controllers/orderController.js';
 import { orderValidation } from '#validations/orderValidation.js';
+import { checkoutValidation } from '#validations/checkoutValidation.js'; // Senior BA Optimized Validation
 import { authHandlingMiddleware } from '#middlewares/authHandlingMiddleware.js';
 import { allowRoles, validateScope } from '#middlewares/permissionMiddleware.js';
 import { validationHandlingMiddleware } from '#middlewares/validationHandlingMiddleware.js';
@@ -10,6 +11,10 @@ import { COMMON_CONSTANTS } from '#constants/common.js';
 import { GENERATE_UTILS } from '#utils/generateUtil.js';
 
 const router = express.Router();
+
+// --- Public Routes for Payment Gateway ---
+router.get('/vnpay-return', orderController.vnpayReturn);
+router.get('/vnpay-ipn', orderController.vnpayIpn);
 
 /**
  * @swagger
@@ -51,10 +56,10 @@ router.post(
     '/checkout',
     apiRateLimiter,
     sanitizeRequest(
-        GENERATE_UTILS.extractFieldsFromJoi(orderValidation.checkout.body),
-        GENERATE_UTILS.extractRequiredFieldsFromJoi(orderValidation.checkout.body)
+        GENERATE_UTILS.extractFieldsFromJoi(checkoutValidation.checkout.body),
+        GENERATE_UTILS.extractRequiredFieldsFromJoi(checkoutValidation.checkout.body)
     ),
-    validationHandlingMiddleware(orderValidation.checkout),
+    validationHandlingMiddleware(checkoutValidation.checkout),
     orderController.checkout
 );
 

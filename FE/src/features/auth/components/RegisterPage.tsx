@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Link } from "react-router-dom"
+import { PATHS } from "@/routes/paths"
 import { User, Mail, Lock, ShieldCheck, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
 
@@ -132,7 +133,7 @@ export default function RegisterPage() {
 
       <div className="text-center text-[14px] font-medium border-t border-border/40 pt-8">
          <span className="text-text-muted">Đã có tài khoản? </span>
-         <Link to="/auth/login" className="text-accent-terra font-bold hover:underline">Đăng nhập</Link>
+         <Link to={PATHS.AUTH.LOGIN} className="text-accent-terra font-bold hover:underline">Đăng nhập</Link>
       </div>
     </motion.div>
   )

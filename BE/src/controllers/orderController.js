@@ -3,10 +3,11 @@ import { orderService } from '#services/orderService.js';
 
 export const orderController = {
     checkout: catchAsync(async (req, res) => {
-        const result = await orderService.checkout(req.body, req.user);
+        const ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        const result = await orderService.checkout(req.body, req.user, ipAddr);
         res.status(201).json({
             success: true,
-            message: 'Đặt hàng thành công, vui lòng chờ giao hàng',
+            message: result.paymentUrl ? 'Chuyển hướng đến cổng thanh toán VNPay' : 'Đặt hàng thành công, vui lòng chờ giao hàng',
             data: result
         });
     }),
@@ -32,11 +33,23 @@ export const orderController = {
     // Cho Khách hàng xem lịch sử đơn hàng
     getMyOrders: catchAsync(async (req, res) => {
         const { page = 1, limit = 10 } = req.query;
-        // Logic sẽ được bổ sung sau hoặc dùng ORDER_REPOSITORY trực tiếp nếu đơn giản
-        // Ở đây demo chốt ParentOrder list cho Customer
         res.status(200).json({
             success: true,
             data: { orders: [], pagination: { total: 0, page, limit } }
         });
+    }),
+
+    // VNPay Return (FE Redirect)
+    vnpayReturn: catchAsync(async (req, res) => {
+        const result = await orderService.handleVNPayReturn(req.query);
+        // Redirect về FE với thông tin kết quả
+        const redirectUrl = `${process.env.CLIENT_URL}/order/vnpay-result?success=${result.success}&orderId=${result.orderId}`;
+        res.redirect(redirectUrl);
+    }),
+
+    // VNPay IPN (Server-to-Server Webhook)
+    vnpayIpn: catchAsync(async (req, res) => {
+        const result = await orderService.handleVNPayIPN(req.query);
+        res.status(200).json(result);
     })
 };

@@ -6,177 +6,283 @@ import { VOUCHER_REPOSITORY } from '#repositories/voucherRepository.js';
 import { INVENTORY_REPOSITORY } from '#repositories/inventoryRepository.js';
 import { WALLET_REPOSITORY } from '#repositories/walletRepository.js';
 import { PRODUCT_REPOSITORY } from '#repositories/productRepository.js';
+import { BRANCH_REPOSITORY } from '#repositories/branchRepository.js';
 import { voucherService } from '#services/voucherService.js';
+import { shippingService } from '#services/shippingService.js';
 import { notificationService } from '#services/notificationService.js';
 import { walletService } from '#services/walletService.js';
 import { ERROR_CODES } from '#constants/errorCode.js';
 import { COMMON_CONSTANTS } from '#constants/common.js';
 import { PERMISSION_UTIL } from '#utils/permissionUtil.js';
+import { VNPayUtil } from '#utils/vnpay.js';
 import ApiError from '#utils/ApiError.js';
 
 export const orderService = {
     /**
-     * Quy trình Thanh toán (Checkout) - Senior Senior Fullstack & BA optimized
+     * Checkout giỏ hàng chuyên sâu (Atomic - Multiple Shops)
      */
-    checkout: async (checkoutData, requestUser) => {
-        const { cartId, paymentMethod, shippingAddress, vouchers, note } = checkoutData;
+    checkout: async (payload, requestUser, ipAddr) => {
+        const { cartId, paymentMethod, shippingAddress, vouchers, note } = payload;
 
-        // 1. Kiểm tra giỏ hàng và Quyền
+        // 1. Kiểm tra giỏ hàng và Quyền (Security Layer)
         const cart = await CART_REPOSITORY.findById(cartId);
-        if (!cart || cart.items.length === 0) {
-            throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Giỏ hàng trống hoặc không tồn tại']);
+        if (!cart || cart.items.length === 0 || cart.status !== 'ACTIVE') {
+            throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, ['Giỏ hàng không hợp lệ hoặc đã được thanh toán']);
         }
-        PERMISSION_UTIL.verifyAuthor(cart.ownerId, requestUser);
+        
+        // BA Case: Chỉ Owner mới được thanh toán giỏ hàng chung
+        if (cart.ownerId.toString() !== requestUser.userId.toString()) {
+            throw new ApiError(ERROR_CODES.FORBIDDEN, ['Chỉ chủ phòng mới có quyền tiến hành thanh toán']);
+        }
 
-        // Đảm bảo không sử dụng mã giảm giá lặp lại
-        const uniqueVouchers = [...new Set(vouchers || [])];
+        const uniqueCodes = [...new Set(vouchers || [])];
+        const platformVouchers = [];
+        const shopBranchVouchers = [];
 
-        // 2. NHÓM MÓN THEO SHOP & XÁC THỰC GIÁ TỪ DB (Anti Price Tampering)
-        const shopsGroup = {};
+        // Pre-fetch and categorize vouchers (Optimized for Senior BA rules)
+        // Pre-fetch and categorize vouchers (Optimized for Senior BA rules - SECURE CHECK)
+        for (const code of uniqueCodes) {
+            const v = await VOUCHER_REPOSITORY.findByCodeWithCreator(code);
+            if (!v) continue;
+            
+            // SECURITY: Phân biệt voucher SÀN vs CHI NHÁNH qua ROLE người tạo
+            if (v.createdBy?.role === COMMON_CONSTANTS.USER_ROLE.PLATFORM_ADMIN) {
+                platformVouchers.push(v);
+            } else if (v.branchId) {
+                // Voucher của Shop phải có branchId (Theo Senior BA Phase 1)
+                shopBranchVouchers.push(v);
+            }
+        }
+
+        // 2. NHÓM MÓN THEO SHOP & BRANCH (Marketplace Grouping)
+        const groupKeyMap = {};
         for (const item of cart.items) {
             const product = await PRODUCT_REPOSITORY.findById(item.productId);
-            // BA Case: Kiểm tra sản phẩm còn tồn tại và đang AVAILABLE
             if (!product || product.status !== COMMON_CONSTANTS.PRODUCT_STATUS.AVAILABLE) {
-                throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Sản phẩm ${item.productId?.name || 'này'} hiện không sẵn sàng`]);
+                throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Sản phẩm ${item.name || 'này'} hiện không khả dụng`]);
             }
 
             const unit = product.units.find(u => u.unitName === item.unitName);
-            if (!unit) throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Đơn vị tính ${item.unitName} không còn tồn tại`]);
+            if (!unit) throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Đơn vị tính ${item.unitName} của ${product.name} không còn tồn tại`]);
 
             const currentPrice = unit.price;
-            const sId = product.shopId.toString();
+            const shopId = product.shopId.toString();
+            const branchId = item.branchId.toString();
+            const key = `${shopId}_${branchId}`;
 
-            if (!shopsGroup[sId]) {
-                shopsGroup[sId] = { items: [], total: 0, branchId: item.branchId };
+            if (!groupKeyMap[key]) {
+                groupKeyMap[key] = { 
+                    shopId, branchId, items: [], subTotal: 0,
+                    appliedVoucherId: null, discount: 0
+                };
             }
 
-            shopsGroup[sId].items.push({
+            groupKeyMap[key].items.push({
                 productId: product._id,
                 name: product.name,
                 unitName: item.unitName,
-                price: currentPrice, // BẢO MẬT: Inject giá từ DB
+                unitNameSnapshot: item.unitName,
+                price: currentPrice,
+                priceAtPurchase: currentPrice,
                 quantity: item.quantity
             });
-            shopsGroup[sId].total += currentPrice * item.quantity;
+            groupKeyMap[key].subTotal += currentPrice * item.quantity;
         }
 
-        const topologyType = mongoose.connection?.getClient()?.topology?.description?.type;
-        const isReplicaSet = !!mongoose.connection?.replicaSet || (topologyType !== 'Standalone' && !!topologyType);
-        let session = null;
-
-        if (isReplicaSet) {
-            try {
-                session = await mongoose.startSession();
-                session.startTransaction();
-            } catch (err) {
-                console.warn('⚠️ Transactions start failed despite being replica set. falling back.');
-                session = null;
-            }
-        }
+        // 3. ATOMIC TRANSACTION START (ACID Guarantee)
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
         try {
             let totalOrderAmount = 0;
-            const subOrdersData = [];
+            const subOrdersToCreate = [];
 
-            // 3. Xử lý logic tiền tệ cho từng SubOrder
-            for (const sId in shopsGroup) {
-                const shop = await SHOP_REPOSITORY.findById(sId);
+            // A. Xử lý SubOrders & Chi nhánh Voucher
+            for (const key in groupKeyMap) {
+                const group = groupKeyMap[key];
+                const shop = await SHOP_REPOSITORY.findById(group.shopId);
                 if (!shop) throw new ApiError(ERROR_CODES.SHOP_NOT_FOUND);
 
-                const group = shopsGroup[sId];
-                let subTotal = group.total;
-
-                // 3.1. Áp voucher (Dùng session để atomic update count)
-                for (const code of uniqueVouchers) {
-                    try {
-                        const discountRes = await voucherService.applyVoucher(code, sId, subTotal);
-                        subTotal -= discountRes.discount;
-                        group.appliedVoucherId = discountRes.voucherId;
-                        await VOUCHER_REPOSITORY.incrementUsedCount(discountRes.voucherId, session);
-                    } catch (err) {
-                        continue; // Mã không hợp lệ cho shop này, bỏ qua
+                // Áp Voucher Chi nhánh
+                for (const v of shopBranchVouchers) {
+                    if (v.branchId.toString() === group.branchId.toString()) {
+                        try {
+                            const res = await voucherService.applyVoucher(v.code, group.shopId, group.subTotal, group.branchId);
+                            group.discount += res.discount;
+                            group.appliedVoucherId = res.voucherId;
+                            await VOUCHER_REPOSITORY.incrementUsedCount(res.voucherId, session);
+                        } catch (err) { continue; }
                     }
                 }
 
-                // 3.2. Tính toán phí và Kiểm tra kho (Lock stock)
-                const platformFee = (subTotal * (shop.commissionRate || 10)) / 100;
-                const netAmount = subTotal - platformFee;
+                const branch = await BRANCH_REPOSITORY.findById(group.branchId);
+                const shippingFee = await shippingService.calculateShippingFee(
+                    branch?.address?.districtId, branch?.address?.wardCode,
+                    shippingAddress.districtId, shippingAddress.wardCode
+                );
 
+                const finalSubAfterShopDiscount = Math.max(0, group.subTotal - group.discount);
+                const platformFee = (finalSubAfterShopDiscount * (shop.commissionRate || 10)) / 100;
+                
+                // 3.3. Inventory Reservation (Early Lock)
                 for (const item of group.items) {
-                    const stock = await INVENTORY_REPOSITORY.reserveStock(
-                        item.productId,
-                        group.branchId,
-                        item.quantity,
-                        session
+                    const success = await INVENTORY_REPOSITORY.reserveStock(
+                        item.productId, group.branchId, item.quantity, session
                     );
-                    if (!stock) throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Hết hàng cho: ${item.name}`]);
+                    if (!success) {
+                        throw new ApiError(ERROR_CODES.INVALID_REQUEST_DATA, [`Sản phẩm ${item.name} đã hết hàng tại chi nhánh được chọn`]);
+                    }
                 }
 
-                subOrdersData.push({
-                    shopId: sId,
+                subOrdersToCreate.push({
+                    shopId: group.shopId,
                     branchId: group.branchId,
                     items: group.items,
                     appliedVoucherId: group.appliedVoucherId,
-                    subTotal,
+                    subTotal: finalSubAfterShopDiscount + shippingFee,
+                    shippingFee,
                     platformFee,
-                    netAmount,
+                    netAmount: finalSubAfterShopDiscount - platformFee,
                     status: COMMON_CONSTANTS.ORDER_STATUS.PENDING
                 });
 
-                totalOrderAmount += subTotal;
+                totalOrderAmount += (finalSubAfterShopDiscount + shippingFee);
             }
 
-            // 4. BA Case: Thanh toán bằng VÍ (WALLET) - Giai đoạn trừ tiền Atomic
-            if (paymentMethod === 'WALLET') {
-                // Trừ tiền trong Transaction để rollback nếu đơn hàng lỗi
-                await walletService.payWithWallet(requestUser.userId, totalOrderAmount, 'PARENT-INTERNAL', session);
+            // B. Áp Voucher SÀN (Platform/Admin)
+            let platformDiscount = 0;
+            const appliedPlatformVoucherCodes = [];
+            for (const v of platformVouchers) {
+                try {
+                    const res = await voucherService.applyVoucher(v.code, null, totalOrderAmount);
+                    platformDiscount += res.discount;
+                    appliedPlatformVoucherCodes.push(v.code);
+                    await VOUCHER_REPOSITORY.incrementUsedCount(v._id, v.usageLimit, session);
+                } catch (err) { continue; }
+            }
+            totalOrderAmount = Math.max(0, totalOrderAmount - platformDiscount);
+
+            // 4. Thanh toán VÍ
+            if (paymentMethod === COMMON_CONSTANTS.PAYMENT_METHOD.WALLET) {
+                await walletService.payWithWallet(requestUser.userId, totalOrderAmount, 'PURCHASE_ORDER', session);
             }
 
-            // 5. Tạo Parent/Sub Orders
+            // 5. Khởi tạo Parent Order
             const parentOrder = await ORDER_REPOSITORY.createParent({
                 userId: requestUser.userId,
                 totalAmount: totalOrderAmount,
                 paymentMethod,
-                paymentStatus: paymentMethod === 'WALLET' ? COMMON_CONSTANTS.PAYMENT_STATUS.PAID : COMMON_CONSTANTS.PAYMENT_STATUS.PENDING,
+                paymentStatus: paymentMethod === COMMON_CONSTANTS.PAYMENT_METHOD.WALLET 
+                    ? COMMON_CONSTANTS.PAYMENT_STATUS.PAID 
+                    : COMMON_CONSTANTS.PAYMENT_STATUS.PENDING,
                 shippingAddress,
-                appliedVouchers: uniqueVouchers,
+                appliedVouchers: [...appliedPlatformVoucherCodes, ...shopBranchVouchers.map(v => v.code)],
                 note
             }, session);
 
-            for (const sub of subOrdersData) {
-                const createdSub = await ORDER_REPOSITORY.createSub({
+            // 6. Khởi tạo Sub Orders & Escrow
+            for (const sub of subOrdersToCreate) {
+                const subOrder = await ORDER_REPOSITORY.createSub({
                     ...sub,
                     parentOrderId: parentOrder._id,
-                    paymentStatus: paymentMethod === 'WALLET' ? COMMON_CONSTANTS.PAYMENT_STATUS.PAID : COMMON_CONSTANTS.PAYMENT_STATUS.PENDING
+                    paymentStatus: parentOrder.paymentStatus
                 }, session);
 
-                // BA Case: Nếu đã thanh toán qua ví -> Treo tiền vào ví Shop (Escrow) ngay lập tức
-                if (paymentMethod === 'WALLET') {
+                if (parentOrder.paymentStatus === COMMON_CONSTANTS.PAYMENT_STATUS.PAID) {
                     await WALLET_REPOSITORY.freezeBalance(sub.shopId, sub.netAmount, session);
                 }
             }
 
-            // 6. Chốt giỏ hàng
+            // 7. Chốt giỏ hàng
             await CART_REPOSITORY.update(cartId, { status: 'COMPLETED' }, session);
 
-            if (session && session.inTransaction()) {
-                await session.commitTransaction();
+            // 8. Tạo VNPay Payment URL (nếu dùng VNPAY)
+            let paymentUrl = null;
+            if (paymentMethod === COMMON_CONSTANTS.PAYMENT_METHOD.VNPAY) {
+                const returnUrl = `${process.env.CLIENT_URL}/order/vnpay-return`;
+                paymentUrl = VNPayUtil.createPaymentUrl(parentOrder._id.toString(), totalOrderAmount, ipAddr, returnUrl);
             }
 
-            // 7. Async Notifications
-            this._sendCheckoutNotifications(parentOrder, subOrdersData, requestUser, totalOrderAmount);
-
-            return parentOrder;
+            await session.commitTransaction();
+            this._sendCheckoutNotifications(parentOrder, subOrdersToCreate, requestUser, totalOrderAmount);
+            
+            return {
+                ...parentOrder.toObject ? parentOrder.toObject() : parentOrder,
+                paymentUrl
+            };
 
         } catch (error) {
-            if (session && session.inTransaction()) {
-                await session.abortTransaction();
-            }
+            await session.abortTransaction();
             throw error;
         } finally {
-            if (session) {
-                session.endSession();
+            session.endSession();
+        }
+    },
+
+    /**
+     * Xử lý VNPay Return (Redirect người dùng)
+     */
+    handleVNPayReturn: async (vnp_Params) => {
+        const isValid = VNPayUtil.verifyReturnUrl({ ...vnp_Params });
+        if (!isValid) return { success: false, orderId: vnp_Params['vnp_TxnRef'] };
+
+        const responseCode = vnp_Params['vnp_ResponseCode'];
+        return {
+            success: responseCode === '00',
+            orderId: vnp_Params['vnp_TxnRef']
+        };
+    },
+
+    /**
+     * Xử lý VNPay IPN (Webhook chính thức)
+     * Senior BA: Phải check chữ ký, số tiền, trạng thái đơn hàng trước khi update
+     */
+    handleVNPayIPN: async (vnp_Params) => {
+        const isValid = VNPayUtil.verifyReturnUrl({ ...vnp_Params });
+        if (!isValid) return { RspCode: '97', Message: 'Fail checksum' };
+
+        const orderId = vnp_Params['vnp_TxnRef'];
+        const amount = parseInt(vnp_Params['vnp_Amount']) / 100;
+        const responseCode = vnp_Params['vnp_ResponseCode'];
+
+        const parentOrder = await ORDER_REPOSITORY.findParentById(orderId);
+        if (!parentOrder) return { RspCode: '01', Message: 'Order not found' };
+        if (parentOrder.totalAmount !== amount) return { RspCode: '04', Message: 'Invalid amount' };
+        if (parentOrder.paymentStatus !== COMMON_CONSTANTS.PAYMENT_STATUS.PENDING) {
+            return { RspCode: '02', Message: 'Order already confirmed' };
+        }
+
+        const session = await mongoose.startSession();
+        session.startTransaction();
+        try {
+            if (responseCode === '00') {
+                // 1. Update Parent Order -> PAID
+                await ORDER_REPOSITORY.updateParentPaymentStatus(orderId, COMMON_CONSTANTS.PAYMENT_STATUS.PAID, session);
+                
+                // 2. Update Sub Orders -> PAID
+                await ORDER_REPOSITORY.updateSubsPaymentStatusByParentId(orderId, COMMON_CONSTANTS.PAYMENT_STATUS.PAID, session);
+
+                // 3. Khởi tạo Escrow - Đóng băng tiền cho từng Shop
+                const subOrders = await ORDER_REPOSITORY.findByParentId(orderId);
+                for (const sub of subOrders) {
+                    await WALLET_REPOSITORY.freezeBalance(sub.shopId, sub.netAmount, session);
+                }
+
+                await session.commitTransaction();
+                return { RspCode: '00', Message: 'Success' };
+            } else {
+                // Thanh toán thất bại
+                await ORDER_REPOSITORY.updateParentPaymentStatus(orderId, COMMON_CONSTANTS.PAYMENT_STATUS.FAILED, session);
+                await ORDER_REPOSITORY.updateSubsPaymentStatusByParentId(orderId, COMMON_CONSTANTS.PAYMENT_STATUS.FAILED, session);
+                
+                await session.commitTransaction();
+                return { RspCode: '00', Message: 'Success (Payment Failed logged)' };
             }
+        } catch (error) {
+            await session.abortTransaction();
+            return { RspCode: '99', Message: 'Unknown error' };
+        } finally {
+            session.endSession();
         }
     },
 
@@ -237,6 +343,16 @@ export const orderService = {
             if (subOrder.parentOrderId?.paymentMethod === COMMON_CONSTANTS.PAYMENT_METHOD.WALLET) {
                 await walletService.completeSubOrderPayment(id);
             }
+            
+            // Giải phóng kho (Deduce reservedStock - Don't restore stockQuantity)
+            for (const item of subOrder.items) {
+                await INVENTORY_REPOSITORY.releaseStock(
+                    item.productId?._id || item.productId,
+                    subOrder.branchId._id || subOrder.branchId,
+                    item.quantity,
+                    false
+                );
+            }
         }
 
         notificationService.sendNotification({
@@ -248,5 +364,66 @@ export const orderService = {
         });
 
         return updatedSubOrder;
+    },
+
+    /**
+     * Tự động hủy các đơn hàng quá hạn thanh toán (Cron Job)
+     */
+    cancelExpiredOrders: async (minutesAgo = 20) => {
+        const expiredOrders = await ORDER_REPOSITORY.findExpiredParents(minutesAgo);
+        if (expiredOrders.length === 0) return;
+
+        console.log(`[Job] Đang xử lý hủy ${expiredOrders.length} đơn hàng quá hạn...`);
+
+        for (const order of expiredOrders) {
+            const session = await mongoose.startSession();
+            session.startTransaction();
+            try {
+                // 1. Update Parent -> FAILED
+                await ORDER_REPOSITORY.updateParentPaymentStatus(order._id, COMMON_CONSTANTS.PAYMENT_STATUS.FAILED, session);
+                
+                // 2. Update Subs -> CANCELLED
+                await ORDER_REPOSITORY.updateSubsPaymentStatusByParentId(order._id, COMMON_CONSTANTS.PAYMENT_STATUS.FAILED, session);
+                const subOrders = await ORDER_REPOSITORY.findByParentId(order._id);
+                
+                for (const sub of subOrders) {
+                    await ORDER_REPOSITORY.updateSubStatus(sub._id, COMMON_CONSTANTS.ORDER_STATUS.CANCELLED, session);
+                    
+                    // 3. Restore Stock
+                    for (const item of sub.items) {
+                        await INVENTORY_REPOSITORY.releaseStock(
+                            item.productId?._id || item.productId,
+                            sub.branchId._id || sub.branchId,
+                            item.quantity,
+                            true,
+                            session
+                        );
+                    }
+
+                    // 4. Restore Voucher (Sub-order level)
+                    if (sub.appliedVoucherId) {
+                        await VOUCHER_REPOSITORY.decrementUsedCount(sub.appliedVoucherId, session);
+                    }
+                }
+
+                // 5. Restore Platform Vouchers (Parent level)
+                // Note: Logic này tùy thuộc vào việc ParentOrder.appliedVouchers lưu ID hay Code. 
+                // Ở đây assume ID hoặc cần findByCode.
+                if (order.appliedVouchers && order.appliedVouchers.length > 0) {
+                   for (const vCode of order.appliedVouchers) {
+                      const v = await VOUCHER_REPOSITORY.findByCode(vCode);
+                      if (v) await VOUCHER_REPOSITORY.decrementUsedCount(v._id, session);
+                   }
+                }
+
+                await session.commitTransaction();
+                console.log(`[Job] Đã hủy đơn hàng: ${order._id}`);
+            } catch (error) {
+                await session.abortTransaction();
+                console.error(`[Job] Lỗi khi hủy đơn ${order._id}:`, error);
+            } finally {
+                session.endSession();
+            }
+        }
     }
 };

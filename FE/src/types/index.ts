@@ -131,13 +131,13 @@ export interface IOrder {
   _id: string;
   userId: string;
   items: {
-    productId: string;
+    productId: string | IProduct;
     quantity: number;
     unitId: string;
     price: number;
   }[];
   totalAmount: number;
-  status: 'PENDING' | 'CONFIRMED' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING' | 'CONFIRMED' | 'SHIPPING' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED';
   branchId: string;
   shippingAddress: {
